@@ -55,6 +55,12 @@ enum { garland_length = 50 };
 enum { btn_double_click_pause_ms = 200 };
 enum { dummy_arg = 0 };
 
+enum {
+    full_hue = 360,
+    max_whiteness = 100,
+    max_value = 100
+};
+
 struct SmartLED garland;
 uint8_t garland_data[SMARTLED_BUFSIZE(garland_length)];
 
@@ -78,7 +84,7 @@ static void running_rainbow(struct SmartLED *leds, uint32_t *userdata)
     for (i = 0; i < leds->length; i++)
         SmartLED_Set_HSV(leds, i, hsv((hue+i) % full_hue, max_whiteness, max_value));
         
-    hue = (hue + 1) % full_hue;
+    hue = (hue + 4) % full_hue;
     *userdata = hue;
 }
 
@@ -99,7 +105,7 @@ static void complementary1(struct SmartLED *leds, uint32_t *userdata)
     uint32_t i;
     uint32_t offset = *userdata;
     
-    const uint8_t colors[] = {7, 48 + 7};
+    const uint16_t colors[] = {30, 180 + 30};
     const uint32_t period = 20;
 
     for (i = 0; i < leds->length; i++)
@@ -116,7 +122,7 @@ static void complementary2(struct SmartLED *leds, uint32_t *userdata)
     uint32_t i;
     uint32_t offset = *userdata;
     
-    const uint8_t colors[] = {32, 48 + 32};
+    const uint16_t colors[] = {120, 180 + 120};
     const uint32_t period = 20;
 
     for (i = 0; i < leds->length; i++)

@@ -122,10 +122,10 @@ C_INCLUDES =  \
 -IDrivers/STM32F0xx_HAL_Driver/Inc/Legacy \
 -IDrivers/CMSIS/Device/ST/STM32F0xx/Include \
 -IDrivers/CMSIS/Include \
--I/d/Development/CubeMX/Libraries/smartled \
--I/d/Development/CubeMX/Libraries/colorspaces \
--I/d/Development/CubeMX/Libraries/tinsel \
--I/d/Development/CubeMX/Libraries/button
+-ILibraries/smartled \
+-ILibraries/colorspaces \
+-ILibraries/tinsel \
+-ILibraries/button
 
 
 # compile gcc flags
