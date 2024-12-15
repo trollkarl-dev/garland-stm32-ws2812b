@@ -84,7 +84,7 @@ static void running_rainbow(struct SmartLED *leds, uint32_t *userdata)
     for (i = 0; i < leds->length; i++)
         SmartLED_Set_HSV(leds, i, hsv((hue+i) % full_hue, max_whiteness, max_value));
         
-    hue = (hue + 4) % full_hue;
+    hue = (hue + 6) % full_hue;
     *userdata = hue;
 }
 
