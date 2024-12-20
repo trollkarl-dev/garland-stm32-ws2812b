@@ -100,45 +100,94 @@ static void all_rainbow(struct SmartLED *leds, uint32_t *userdata)
     *userdata = hue;
 }
 
+static int32_t weight_average(int32_t a, int32_t b, int32_t coef, int32_t max_coef)
+{
+    return (a*coef + b*(max_coef - coef)) / max_coef;
+}
+
 static void complementary1(struct SmartLED *leds, uint32_t *userdata)
 {
     uint32_t i;
-    uint32_t offset = *userdata;
+    int16_t *params = (int16_t *) userdata;
     
-    const uint16_t colors[] = {30, 180 + 30};
-    const uint32_t period = 20;
-
+    const RGB_t col[2] = {(RGB_t) {255, 128, 0},
+                          (RGB_t) {0, 128, 255}};
+    const uint32_t period = 32;
+    
+    if (params[0] >= period && params[1] == 0)
+        params[1] = 1;
+    
+    if (params[0] <= 0 && params[1] == 1)
+        params[1] = 0;
+    
+    params[0] += params[1] ? -1 : 1;
+    
+    RGB_t color_even = (RGB_t)
+    {
+        weight_average(col[0].r, col[1].r, params[0], period),
+        weight_average(col[0].g, col[1].g, params[0], period),
+        weight_average(col[0].b, col[1].b, params[0], period)
+    };
+    
+    RGB_t color_odd = (RGB_t)
+    {
+        weight_average(col[1].r, col[0].r, params[0], period),
+        weight_average(col[1].g, col[0].g, params[0], period),
+        weight_average(col[1].b, col[0].b, params[0], period)
+    };
+    
     for (i = 0; i < leds->length; i++)
     {
-        SmartLED_Set_HSV(leds, i, hsv(colors[(i + (offset < period)) % 2], max_whiteness, max_value));
+        SmartLED_Set_RGB(leds, i, (i % 2) ? color_odd : color_even);
     }
     
-    offset = (offset + 1) % (2 * period);
-    *userdata = offset;
+    *userdata = *((uint32_t *) params);
 }
 
 static void complementary2(struct SmartLED *leds, uint32_t *userdata)
 {
     uint32_t i;
-    uint32_t offset = *userdata;
+    int16_t *params = (int16_t *) userdata;
     
-    const uint16_t colors[] = {120, 180 + 120};
-    const uint32_t period = 20;
-
+    const RGB_t col[2] = {(RGB_t) {128, 255, 0},
+                          (RGB_t) {128, 0, 255}};
+    const uint32_t period = 32;
+    
+    if (params[0] >= period && params[1] == 0)
+        params[1] = 1;
+    
+    if (params[0] <= 0 && params[1] == 1)
+        params[1] = 0;
+    
+    params[0] += params[1] ? -1 : 1;
+    
+    RGB_t color_even = (RGB_t)
+    {
+        weight_average(col[0].r, col[1].r, params[0], period),
+        weight_average(col[0].g, col[1].g, params[0], period),
+        weight_average(col[0].b, col[1].b, params[0], period)
+    };
+    
+    RGB_t color_odd = (RGB_t)
+    {
+        weight_average(col[1].r, col[0].r, params[0], period),
+        weight_average(col[1].g, col[0].g, params[0], period),
+        weight_average(col[1].b, col[0].b, params[0], period)
+    };
+    
     for (i = 0; i < leds->length; i++)
     {
-        SmartLED_Set_HSV(leds, i, hsv(colors[(i + (offset < period)) % 2], max_whiteness, max_value));
+        SmartLED_Set_RGB(leds, i, (i % 2) ? color_odd : color_even);
     }
     
-    offset = (offset + 1) % (2 * period);
-    *userdata = offset;
+    *userdata = *((uint32_t *) params);
 }
 
 static garland_effect effects_list[] = {
     running_rainbow,
     all_rainbow,
     complementary1,
-    complementary2
+    complementary2,
 };
 
 static volatile uint32_t current_effect_data = 0;
