@@ -61,8 +61,10 @@ enum {
     max_value = 100
 };
 
-struct SmartLED garland;
-uint8_t garland_data[SMARTLED_BUFSIZE(garland_length)];
+static struct SmartLED garland;
+
+static uint8_t leds_buffer[garland_length * 3];
+static uint8_t pulses_buffer[smartled_pulses_per_led * 2];
 
 struct button btn;
 /* USER CODE END PV */
@@ -196,12 +198,17 @@ static volatile uint32_t current_effect_idx = 0;
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static void garland_flush(struct SmartLED *garland)
+static void garland_start(struct SmartLED *garland)
 {
     HAL_TIM_PWM_Start_DMA(&htim3,
                           TIM_CHANNEL_4,
-                          (uint32_t *) garland->raw_data,
-                          SMARTLED_BUFSIZE(garland->length));
+                          (uint32_t *) garland->pulses_buffer,
+                          2 * smartled_pulses_per_led);
+}
+
+static void garland_stop(struct SmartLED *garland)
+{
+    HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_4);
 }
 
 static bool btn_read(void)
@@ -241,10 +248,24 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
+void foo(void)
+{
+    if (1 == SmartLED_Next(&garland)) {
+        tinsel_add_task_timer(garland_routine, dummy_arg, 50);
+    }
+}
+
+void HAL_TIM_PWM_PulseFinishedHalfCpltCallback(TIM_HandleTypeDef * htim)
+{
+    if (htim == &htim3) {
+        foo();
+    }
+}
+
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef * htim)
 {
     if (htim == &htim3) {
-        tinsel_add_task_timer(garland_routine, dummy_arg, 50);
+        foo();
     }
 }
 /* USER CODE END 0 */
@@ -280,7 +301,12 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM17_Init();
   /* USER CODE BEGIN 2 */
-  SmartLED_Init(&garland, garland_length, garland_data, garland_flush);
+  SmartLED_Init(&garland,
+                garland_length,
+                leds_buffer,
+                pulses_buffer,
+                garland_start,
+                garland_stop);
   
   button_init(&btn, btn_double_click_pause_ms, btn_read, btn_click_callback);
   

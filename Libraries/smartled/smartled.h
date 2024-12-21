@@ -10,29 +10,38 @@ extern "C" {
 #include "colorspaces.h"
 
 enum {
-    reset_width = 100, /* amount of dummy pulses */
-    led_width = 24, /* bits (pulses) per LED */
-    low = 16,
-    high = 43
+    smartled_pulse_low = 16,
+    smartled_pulse_high = 43,
+    smartled_pulses_per_led = 24
 };
 
 #define SMARTLED_BUFSIZE(LENGTH) (((reset_width) + (LENGTH) * (led_width)))
 
 struct SmartLED {
     uint32_t length;
-    uint8_t *raw_data;
+    int32_t led_idx;
+    uint8_t *leds_buffer;
+    uint8_t *pulses_buffer;
     
-    void (*flush)(struct SmartLED *led);
+    void (*start)(struct SmartLED *led);
+    void (*stop)(struct SmartLED *led);
 };
 
 void SmartLED_Init(struct SmartLED *led,
                    uint32_t length,
-                   uint8_t *raw_data,
-                   void (*flush)(struct SmartLED *led));
+                   uint8_t *leds_buffer,
+                   uint8_t *pulses_buffer,
+                   void (*start)(struct SmartLED *led),
+                   void (*stop)(struct SmartLED *led));
+
 void SmartLED_Clear(struct SmartLED *led);
+
 void SmartLED_Set_RGB(struct SmartLED *led, uint32_t idx, RGB_t color);
 void SmartLED_Set_HSV(struct SmartLED *led, uint32_t idx, HSV_t color);
+
 void SmartLED_Flush(struct SmartLED *led);
+/* must be called in half transfer and full transfer interrupts */
+uint32_t SmartLED_Next(struct SmartLED *led);
 
 #ifdef __cplusplus
 }
