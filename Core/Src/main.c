@@ -308,7 +308,10 @@ int main(void)
                 garland_start,
                 garland_stop);
   
-  button_init(&btn, btn_double_click_pause_ms, btn_read, btn_click_callback);
+  button_init(&btn,
+              btn_double_click_pause_ms,
+              btn_read,
+              btn_click_callback);
   
   tinsel_init();
   tinsel_add_task(garland_routine, dummy_arg);

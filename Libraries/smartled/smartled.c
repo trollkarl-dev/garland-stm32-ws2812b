@@ -51,7 +51,6 @@ void SmartLED_Flush(struct SmartLED *led)
 {
     led->led_idx = -2;
     memset(led->pulses_buffer, 0, 2 * smartled_pulses_per_led);
-    /* HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_4, (uint32_t *) g->pulses_buffer, 2 * pulses_per_led); */
     led->start(led);
 }
 
@@ -64,7 +63,6 @@ uint32_t SmartLED_Next(struct SmartLED *led)
 
     if (led->led_idx >= 0) {
         if (led->led_idx > led->length) {
-            /*HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_4);*/
             led->stop(led);
             return 1;
         }

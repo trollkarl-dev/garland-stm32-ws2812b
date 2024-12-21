@@ -8,7 +8,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
-enum { button_debounce_timer_top = 20 };
+enum { button_debounce_timer_top = 10 };
 
 enum button_init_result {
     button_init_success = 0,
