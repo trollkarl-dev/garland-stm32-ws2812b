@@ -28,14 +28,18 @@ void SmartLED_Clear(struct SmartLED *led)
     }
 }
 
+static uint8_t gamma_correction(uint8_t data)
+{
+    return ((uint32_t) data * (uint32_t) (data + 1)) / 256;
+}
+
 void SmartLED_Set_RGB(struct SmartLED *led, uint32_t idx, RGB_t color)
 {
     uint8_t *dst_ptr = led->leds_buffer + 3 * idx;
     
-    dst_ptr[0] = color.r;
-    dst_ptr[1] = color.g;
-    dst_ptr[2] = color.b;
-
+    dst_ptr[0] = gamma_correction(color.r);
+    dst_ptr[1] = gamma_correction(color.g);
+    dst_ptr[2] = gamma_correction(color.b);
 }
 
 void SmartLED_Set_HSV(struct SmartLED *led, uint32_t idx, HSV_t color)
