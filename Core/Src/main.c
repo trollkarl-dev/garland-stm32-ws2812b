@@ -47,8 +47,10 @@
 
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim16;
 TIM_HandleTypeDef htim17;
 DMA_HandleTypeDef hdma_tim3_ch4_up;
+DMA_HandleTypeDef hdma_tim16_ch1_up;
 
 /* USER CODE BEGIN PV */
 enum { garland_length = 50 };
@@ -61,12 +63,223 @@ enum {
     max_value = 100
 };
 
+enum {
+    clk_pin = 10,
+    dio_pin = 9,
+    
+    clk_low = (1 << (clk_pin + 16)),
+    clk_hgh = (1 << (clk_pin + 00)),
+    
+    dio_low = (1 << (dio_pin + 16)),
+    dio_hgh = (1 << (dio_pin + 00)),
+    dio_clr = ~(dio_low | dio_hgh)
+};
+
 static struct SmartLED garland;
 
 static uint8_t leds_buffer[garland_length * 3];
 static uint8_t pulses_buffer[smartled_pulses_per_led * 2];
 
 struct button btn;
+
+static uint32_t tm1637_buffer[] = {
+    /* INITIAL */
+    
+    /* stop sequence */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_hgh | dio_hgh,
+    
+    /* start sequence */
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    
+    /* send byte */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    
+    /* wait for ack */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* stop sequence */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_hgh | dio_hgh,
+    
+    /* DISPLAY */
+    
+    /* start sequence */
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    
+    /* send byte */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* wait for ack */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* send byte */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    
+    /* wait for ack */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* send byte */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    
+    /* wait for ack */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* send byte */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    
+    /* wait for ack */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* send byte */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    
+    /* wait for ack */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* stop sequence */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_hgh | dio_hgh,
+    
+    /* FINAL */
+    
+    /* start sequence */
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    
+    /* send byte */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* wait for ack */
+    clk_low | dio_hgh,
+    clk_hgh | dio_hgh,
+    
+    /* stop sequence */
+    clk_low | dio_low,
+    clk_hgh | dio_low,
+    clk_hgh | dio_hgh
+};
+
+static uint8_t digits[] = {
+   0x3f, 0x06, 0x5b, 0x4f, 0x66,
+   0x6d, 0x7d, 0x07, 0x7f, 0x6f
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,6 +288,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM17_Init(void);
+static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
 typedef void (*garland_effect)(struct SmartLED *, uint32_t *);
 
@@ -198,6 +412,31 @@ static volatile uint32_t current_effect_idx = 0;
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void tm1637_write_digit(uint8_t position, uint8_t data)
+{
+    uint32_t idx, value;
+    uint8_t mask = 0x01;
+    
+    enum {
+        first_digit_offset = 46,
+        words_per_digit = 18
+    };
+    
+    if (position >= 4)
+        return;
+    
+    idx = first_digit_offset + position * words_per_digit;
+    
+    while (mask) {
+        value = (data & mask) ? dio_hgh : dio_low;
+        tm1637_buffer[idx] = (tm1637_buffer[idx] & dio_clr) | value;
+        tm1637_buffer[idx+1] = (tm1637_buffer[idx+1] & dio_clr) | value;
+        
+        idx += 2;
+        mask <<= 1;
+    }
+}
+
 static void garland_start(struct SmartLED *garland)
 {
     HAL_TIM_PWM_Start_DMA(&htim3,
@@ -216,18 +455,6 @@ static bool btn_read(void)
     return HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_3) == GPIO_PIN_RESET;
 }
 
-static void btn_click_callback(uint8_t clicks)
-{
-    if (clicks == 1) {
-        current_effect_idx++;
-        current_effect_data = 0;
-        
-        if (current_effect_idx == sizeof(effects_list)/sizeof(effects_list[0])) {
-            current_effect_idx = 0;
-        }
-    }
-}
-
 static void garland_routine(uint32_t data)
 {
     effects_list[current_effect_idx](&garland, &current_effect_data);
@@ -240,6 +467,46 @@ static void button_routine(uint32_t data)
     
     button_check(&btn);
 }
+
+static void display_routine(uint32_t data)
+{
+    HAL_DMA_StateTypeDef dma_state;
+    
+    dma_state = HAL_DMA_GetState(htim16.hdma[TIM_DMA_ID_UPDATE]);
+    if (dma_state != HAL_DMA_STATE_READY) {
+        tinsel_add_task_timer(display_routine, data, 10);
+        return;
+    }
+    
+    tm1637_write_digit(0, digits[0]);
+    tm1637_write_digit(1, digits[0]);
+    tm1637_write_digit(2, digits[0]);
+    tm1637_write_digit(3, digits[data]);
+    
+    HAL_DMA_Start(htim16.hdma[TIM_DMA_ID_UPDATE],
+                  (uint32_t) tm1637_buffer,
+                  (uint32_t) &(GPIOA->BSRR),
+                  sizeof(tm1637_buffer) / sizeof(uint32_t));
+    
+    HAL_DMA_PollForTransfer(htim16.hdma[TIM_DMA_ID_UPDATE],
+                            HAL_DMA_FULL_TRANSFER,
+                            1000);
+}
+
+static void btn_click_callback(uint8_t clicks)
+{
+    if (clicks == 1) {
+        current_effect_idx++;
+        current_effect_data = 0;
+        
+        if (current_effect_idx == sizeof(effects_list)/sizeof(effects_list[0])) {
+            current_effect_idx = 0;
+        }
+        
+        tinsel_add_task(display_routine, current_effect_idx);
+    }
+}
+
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -300,7 +567,11 @@ int main(void)
   MX_DMA_Init();
   MX_TIM3_Init();
   MX_TIM17_Init();
+  MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
+  __HAL_TIM_ENABLE_DMA(&htim16, TIM_DMA_UPDATE);
+  __HAL_TIM_ENABLE(&htim16);
+  
   SmartLED_Init(&garland,
                 garland_length,
                 leds_buffer,
@@ -314,6 +585,7 @@ int main(void)
               btn_click_callback);
   
   tinsel_init();
+  tinsel_add_task(display_routine, current_effect_idx);
   tinsel_add_task(garland_routine, dummy_arg);
   tinsel_add_task(button_routine, dummy_arg);
   
@@ -431,6 +703,38 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief TIM16 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM16_Init(void)
+{
+
+  /* USER CODE BEGIN TIM16_Init 0 */
+
+  /* USER CODE END TIM16_Init 0 */
+
+  /* USER CODE BEGIN TIM16_Init 1 */
+
+  /* USER CODE END TIM16_Init 1 */
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 47;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 9;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM16_Init 2 */
+
+  /* USER CODE END TIM16_Init 2 */
+
+}
+
+/**
   * @brief TIM17 Initialization Function
   * @param None
   * @retval None
@@ -475,6 +779,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
+  /* DMA1_Channel4_5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_5_IRQn);
 
 }
 
@@ -494,10 +801,20 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9|GPIO_PIN_10, GPIO_PIN_SET);
+
   /*Configure GPIO pin : PA3 */
   GPIO_InitStruct.Pin = GPIO_PIN_3;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PA9 PA10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
