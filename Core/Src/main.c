@@ -483,14 +483,10 @@ static void display_routine(uint32_t data)
     tm1637_write_digit(2, digits[0]);
     tm1637_write_digit(3, digits[data]);
     
-    HAL_DMA_Start(htim16.hdma[TIM_DMA_ID_UPDATE],
-                  (uint32_t) tm1637_buffer,
-                  (uint32_t) &(GPIOA->BSRR),
-                  sizeof(tm1637_buffer) / sizeof(uint32_t));
-    
-    HAL_DMA_PollForTransfer(htim16.hdma[TIM_DMA_ID_UPDATE],
-                            HAL_DMA_FULL_TRANSFER,
-                            1000);
+    HAL_DMA_Start_IT(htim16.hdma[TIM_DMA_ID_UPDATE],
+                    (uint32_t) tm1637_buffer,
+                    (uint32_t) &(GPIOA->BSRR),
+                    sizeof(tm1637_buffer) / sizeof(uint32_t));
 }
 
 static void btn_click_callback(uint8_t clicks)
