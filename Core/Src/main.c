@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "tinsel.h"
 #include "button.h"
@@ -54,7 +55,7 @@ DMA_HandleTypeDef hdma_tim3_ch4_up;
 enum { garland_length = 50 };
 enum { btn_double_click_pause_ms = 200 };
 enum { dummy_arg = 0 };
-enum { garland_effect_shared_data_size = 4 };
+enum { garland_effect_shared_data_size = 12 };
 
 enum {
     full_hue = 360,
@@ -103,15 +104,13 @@ static void running_rainbow_loop(struct SmartLED *leds, void *raw_data)
 {
     uint32_t i;
     running_rainbow_data_t * const data = (running_rainbow_data_t *) raw_data;
-    uint32_t hue = data->hue;
     
     for (i = 0; i < leds->length; i++)
     {
-        SmartLED_Set_HSV(leds, i, hsv((hue+i) % full_hue, max_whiteness, max_value));
+        SmartLED_Set_HSV(leds, i, hsv((data->hue+i) % full_hue, max_whiteness, max_value));
     }
         
-    hue = (hue + 6) % full_hue;
-    data->hue = hue;
+    data->hue = (data->hue + 6) % full_hue;
 }
 
 typedef struct {
@@ -131,103 +130,79 @@ static void all_rainbow_loop(struct SmartLED *leds, void *raw_data)
 {
     uint32_t i;
     all_rainbow_data_t * const data = (all_rainbow_data_t *) raw_data;
-    uint32_t hue = data->hue;
     
     for (i = 0; i < leds->length; i++)
-        SmartLED_Set_HSV(leds, i, hsv(hue, max_whiteness, max_value));
+        SmartLED_Set_HSV(leds, i, hsv(data->hue, max_whiteness, max_value));
         
-    hue = (hue + 1) % full_hue;
-    data->hue = hue;
+    data->hue = (data->hue + 1) % full_hue;
 }
 
-/*
 static int32_t weight_average(int32_t a, int32_t b, int32_t coef, int32_t max_coef)
 {
     return (a*coef + b*(max_coef - coef)) / max_coef;
 }
 
-static void complementary1(struct SmartLED *leds, uint32_t *userdata)
+typedef struct {
+    int8_t counter;
+    uint8_t direction;
+    RGB_t col[2];
+} complementary_data_t;
+
+STATIC_ASSERT(sizeof(complementary_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
+
+static void complementary_setup(void *raw_data, const void *initial)
 {
-    uint32_t i;
-    int16_t *params = (int16_t *) userdata;
-    
-    const RGB_t col[2] = {(RGB_t) {255, 128, 0},
-                          (RGB_t) {0, 128, 255}};
-    const uint32_t period = 32;
-    
-    if (params[0] >= period && params[1] == 0)
-        params[1] = 1;
-    
-    if (params[0] <= 0 && params[1] == 1)
-        params[1] = 0;
-    
-    params[0] += params[1] ? -1 : 1;
-    
-    RGB_t color_even = (RGB_t)
-    {
-        weight_average(col[0].r, col[1].r, params[0], period),
-        weight_average(col[0].g, col[1].g, params[0], period),
-        weight_average(col[0].b, col[1].b, params[0], period)
-    };
-    
-    RGB_t color_odd = (RGB_t)
-    {
-        weight_average(col[1].r, col[0].r, params[0], period),
-        weight_average(col[1].g, col[0].g, params[0], period),
-        weight_average(col[1].b, col[0].b, params[0], period)
-    };
-    
-    for (i = 0; i < leds->length; i++)
-    {
-        SmartLED_Set_RGB(leds, i, (i % 2) ? color_odd : color_even);
-    }
-    
-    *userdata = *((uint32_t *) params);
+    memcpy(raw_data, initial, sizeof(complementary_data_t));
 }
 
-static void complementary2(struct SmartLED *leds, uint32_t *userdata)
+static void complementary_loop(struct SmartLED *leds, void *raw_data)
 {
     uint32_t i;
-    int16_t *params = (int16_t *) userdata;
-    
-    const RGB_t col[2] = {(RGB_t) {128, 255, 0},
-                          (RGB_t) {128, 0, 255}};
+    complementary_data_t * const data = (complementary_data_t *) raw_data;
     const uint32_t period = 32;
     
-    if (params[0] >= period && params[1] == 0)
-        params[1] = 1;
+    if (data->counter >= period && data->direction == 0)
+        data->direction = 1;
     
-    if (params[0] <= 0 && params[1] == 1)
-        params[1] = 0;
+    if (data->counter <= 0 && data->direction == 1)
+        data->direction = 0;
     
-    params[0] += params[1] ? -1 : 1;
+    data->counter += data->direction ? -1 : 1;
     
     RGB_t color_even = (RGB_t)
     {
-        weight_average(col[0].r, col[1].r, params[0], period),
-        weight_average(col[0].g, col[1].g, params[0], period),
-        weight_average(col[0].b, col[1].b, params[0], period)
+        weight_average(data->col[0].r, data->col[1].r, data->counter, period),
+        weight_average(data->col[0].g, data->col[1].g, data->counter, period),
+        weight_average(data->col[0].b, data->col[1].b, data->counter, period)
     };
     
     RGB_t color_odd = (RGB_t)
     {
-        weight_average(col[1].r, col[0].r, params[0], period),
-        weight_average(col[1].g, col[0].g, params[0], period),
-        weight_average(col[1].b, col[0].b, params[0], period)
+        weight_average(data->col[1].r, data->col[0].r, data->counter, period),
+        weight_average(data->col[1].g, data->col[0].g, data->counter, period),
+        weight_average(data->col[1].b, data->col[0].b, data->counter, period)
     };
     
     for (i = 0; i < leds->length; i++)
     {
         SmartLED_Set_RGB(leds, i, (i % 2) ? color_odd : color_even);
     }
-    
-    *userdata = *((uint32_t *) params);
 }
-*/
+
+const complementary_data_t complementaries[] = 
+{
+    /* yellow <-> blue */
+    { 0, 0, {(RGB_t) {255, 128, 0}, (RGB_t) {0, 128, 255}} },
+    
+    /* green <-> purple */
+    { 0, 0, {(RGB_t) {128, 255, 0}, (RGB_t) {128, 0, 255}} }
+};
 
 static const garland_effect_t garland_effects[] = {
     { running_rainbow_setup, running_rainbow_loop, NULL },
-    { all_rainbow_setup, all_rainbow_loop, NULL }
+    { all_rainbow_setup, all_rainbow_loop, NULL },
+    { complementary_setup, complementary_loop, &(complementaries[0]) },
+    { complementary_setup, complementary_loop, &(complementaries[1]) }
 };
 
 static volatile uint32_t current_effect_idx = 0;
