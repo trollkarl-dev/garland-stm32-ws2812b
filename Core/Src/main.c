@@ -209,7 +209,7 @@ static void perlin_loop(struct SmartLED *leds, void *raw_data)
     
     for (i = 0; i < leds->length; i++)
     {
-        float coef = (perlin(i, data->offset, leds->length, leds->length, 10) + 1.0f) / 2.0f;
+        float coef = perlin(i, data->offset, leds->length, leds->length, 5);
 
         RGB_t color = (RGB_t)
         {
@@ -233,7 +233,7 @@ const complementary_data_t complementaries[] =
     { 0, 0, {(RGB_t) {128, 255, 0}, (RGB_t) {128, 0, 255}} }
 };
 
-const perlin_data_t perlin_setups[] =
+static const perlin_data_t perlin_initials[] =
 {
     { {(RGB_t) {128, 255, 0}, (RGB_t) {128, 0, 255}}, 0 }
 };
@@ -245,7 +245,7 @@ static const garland_effect_t garland_effects[] = {
     { complementary_setup, complementary_loop, &(complementaries[0]) },
     { complementary_setup, complementary_loop, &(complementaries[1]) },
     
-    { perlin_setup, perlin_loop, &(perlin_setups[0]) }
+    { perlin_setup, perlin_loop, &(perlin_initials[0]) }
 };
 
 static volatile uint32_t current_effect_idx = 0;

@@ -167,5 +167,5 @@ float perlin(uint32_t fx,
     float bx = lerp(bx1, bx2, point_in_quad_x);
     float tb = lerp(tx, bx, point_in_quad_y);
 
-    return tb;
+    return quntic_curve((tb + 1.0f) / 2.0f);
 }
