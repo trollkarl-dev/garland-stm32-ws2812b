@@ -37,7 +37,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define STATIC_ASSERT(COND, MSG) typedef char static_assertion_##MSG[(COND)?1:-1]
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -54,6 +54,7 @@ DMA_HandleTypeDef hdma_tim3_ch4_up;
 enum { garland_length = 50 };
 enum { btn_double_click_pause_ms = 200 };
 enum { dummy_arg = 0 };
+enum { garland_effect_shared_data_size = 4 };
 
 enum {
     full_hue = 360,
@@ -76,32 +77,70 @@ static void MX_DMA_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM17_Init(void);
 /* USER CODE BEGIN PFP */
-typedef void (*garland_effect)(struct SmartLED *, uint32_t *);
+typedef void (*garland_setup_handler)(void *, const void *);
+typedef void (*garland_loop_handler)(struct SmartLED *, void *);
 
-static void running_rainbow(struct SmartLED *leds, uint32_t *userdata)
+typedef struct {
+    garland_setup_handler setup;
+    garland_loop_handler loop;
+    const void *initial;
+} garland_effect_t;
+
+typedef struct {
+    uint32_t hue;
+} running_rainbow_data_t;
+
+STATIC_ASSERT(sizeof(running_rainbow_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
+
+static void running_rainbow_setup(void *raw_data, const void *initial)
 {
-    uint32_t i;
-    uint32_t hue = *userdata;
-    
-    for (i = 0; i < leds->length; i++)
-        SmartLED_Set_HSV(leds, i, hsv((hue+i) % full_hue, max_whiteness, max_value));
-        
-    hue = (hue + 6) % full_hue;
-    *userdata = hue;
+    running_rainbow_data_t * const data = (running_rainbow_data_t *) raw_data;
+
+    data->hue = 0;
 }
 
-static void all_rainbow(struct SmartLED *leds, uint32_t *userdata)
+static void running_rainbow_loop(struct SmartLED *leds, void *raw_data)
 {
     uint32_t i;
-    uint32_t hue = *userdata;
+    running_rainbow_data_t * const data = (running_rainbow_data_t *) raw_data;
+    uint32_t hue = data->hue;
+    
+    for (i = 0; i < leds->length; i++)
+    {
+        SmartLED_Set_HSV(leds, i, hsv((hue+i) % full_hue, max_whiteness, max_value));
+    }
+        
+    hue = (hue + 6) % full_hue;
+    data->hue = hue;
+}
+
+typedef struct {
+    uint32_t hue;
+} all_rainbow_data_t;
+
+STATIC_ASSERT(sizeof(all_rainbow_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
+
+static void all_rainbow_setup(void *raw_data, const void *initial)
+{
+    all_rainbow_data_t * const data = (all_rainbow_data_t *) raw_data;
+
+    data->hue = 0;
+}
+
+static void all_rainbow_loop(struct SmartLED *leds, void *raw_data)
+{
+    uint32_t i;
+    all_rainbow_data_t * const data = (all_rainbow_data_t *) raw_data;
+    uint32_t hue = data->hue;
     
     for (i = 0; i < leds->length; i++)
         SmartLED_Set_HSV(leds, i, hsv(hue, max_whiteness, max_value));
         
     hue = (hue + 1) % full_hue;
-    *userdata = hue;
+    data->hue = hue;
 }
 
+/*
 static int32_t weight_average(int32_t a, int32_t b, int32_t coef, int32_t max_coef)
 {
     return (a*coef + b*(max_coef - coef)) / max_coef;
@@ -184,16 +223,38 @@ static void complementary2(struct SmartLED *leds, uint32_t *userdata)
     
     *userdata = *((uint32_t *) params);
 }
+*/
 
-static garland_effect effects_list[] = {
-    running_rainbow,
-    all_rainbow,
-    complementary1,
-    complementary2,
+static const garland_effect_t garland_effects[] = {
+    { running_rainbow_setup, running_rainbow_loop, NULL },
+    { all_rainbow_setup, all_rainbow_loop, NULL }
 };
 
-static volatile uint32_t current_effect_data = 0;
 static volatile uint32_t current_effect_idx = 0;
+static uint8_t garland_effect_shared_data[garland_effect_shared_data_size];
+
+static void garland_select_effect(uint32_t idx)
+{
+    current_effect_idx = idx;
+    (garland_effects[idx].setup)(garland_effect_shared_data, garland_effects[idx].initial);
+}
+
+static void garland_next_effect(void)
+{
+    uint32_t idx = current_effect_idx + 1;
+
+    if (idx >= sizeof(garland_effects) / sizeof(garland_effects[0]))
+    {
+        idx = 0;
+    }
+
+    garland_select_effect(idx);
+}
+
+static void garland_play_currect_effect(void)
+{
+    (garland_effects[current_effect_idx].loop)(&garland, garland_effect_shared_data);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -219,18 +280,13 @@ static bool btn_read(void)
 static void btn_click_callback(uint8_t clicks)
 {
     if (clicks == 1) {
-        current_effect_idx++;
-        current_effect_data = 0;
-        
-        if (current_effect_idx == sizeof(effects_list)/sizeof(effects_list[0])) {
-            current_effect_idx = 0;
-        }
+        garland_next_effect();
     }
 }
 
 static void garland_routine(uint32_t data)
 {
-    effects_list[current_effect_idx](&garland, &current_effect_data);
+    garland_play_currect_effect();
     SmartLED_Flush(&garland);
 }
 
@@ -248,7 +304,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
-void foo(void)
+static void foo(void)
 {
     if (!SmartLED_Next(&garland)) {
         tinsel_add_task_timer(garland_routine, dummy_arg, 50);
@@ -312,6 +368,8 @@ int main(void)
               btn_double_click_pause_ms,
               btn_read,
               btn_click_callback);
+  
+  garland_select_effect(0);
   
   tinsel_init();
   tinsel_add_task(garland_routine, dummy_arg);
