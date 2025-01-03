@@ -29,6 +29,7 @@
 #include "button.h"
 #include "colorspaces.h"
 #include "smartled.h"
+#include "perlin.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -189,6 +190,40 @@ static void complementary_loop(struct SmartLED *leds, void *raw_data)
     }
 }
 
+typedef struct {
+    RGB_t col[2];
+    uint32_t offset;
+} perlin_data_t;
+
+STATIC_ASSERT(sizeof(perlin_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
+
+static void perlin_setup(void *raw_data, const void *initial)
+{
+    memcpy(raw_data, initial, sizeof(perlin_data_t));
+}
+
+static void perlin_loop(struct SmartLED *leds, void *raw_data)
+{
+    perlin_data_t * const data = (perlin_data_t *) raw_data;
+    uint32_t i;
+    
+    for (i = 0; i < leds->length; i++)
+    {
+        float coef = (perlin(i, data->offset, leds->length, leds->length, 10) + 1.0f) / 2.0f;
+
+        RGB_t color = (RGB_t)
+        {
+            (uint8_t) ((float) data->col[0].r + ((float) data->col[1].r - (float) data->col[0].r) * coef),
+            (uint8_t) ((float) data->col[0].g + ((float) data->col[1].g - (float) data->col[0].g) * coef),
+            (uint8_t) ((float) data->col[0].b + ((float) data->col[1].b - (float) data->col[0].b) * coef)
+        };
+        
+        SmartLED_Set_RGB(leds, i, color);
+    }
+    
+    data->offset = (data->offset + 1) % leds->length;
+}
+
 const complementary_data_t complementaries[] = 
 {
     /* yellow <-> blue */
@@ -198,11 +233,19 @@ const complementary_data_t complementaries[] =
     { 0, 0, {(RGB_t) {128, 255, 0}, (RGB_t) {128, 0, 255}} }
 };
 
+const perlin_data_t perlin_setups[] =
+{
+    { {(RGB_t) {128, 255, 0}, (RGB_t) {128, 0, 255}}, 0 }
+};
+
 static const garland_effect_t garland_effects[] = {
     { running_rainbow_setup, running_rainbow_loop, NULL },
     { all_rainbow_setup, all_rainbow_loop, NULL },
+    
     { complementary_setup, complementary_loop, &(complementaries[0]) },
-    { complementary_setup, complementary_loop, &(complementaries[1]) }
+    { complementary_setup, complementary_loop, &(complementaries[1]) },
+    
+    { perlin_setup, perlin_loop, &(perlin_setups[0]) }
 };
 
 static volatile uint32_t current_effect_idx = 0;

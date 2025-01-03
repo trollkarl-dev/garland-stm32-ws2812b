@@ -60,7 +60,8 @@ Core/Src/system_stm32f0xx.c \
 Libraries/smartled/smartled.c \
 Libraries/colorspaces/colorspaces.c \
 Libraries/tinsel/tinsel.c \
-Libraries/button/button.c
+Libraries/button/button.c \
+Libraries/perlin/perlin.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -125,7 +126,8 @@ C_INCLUDES =  \
 -ILibraries/smartled \
 -ILibraries/colorspaces \
 -ILibraries/tinsel \
--ILibraries/button
+-ILibraries/button \
+-ILibraries/perlin
 
 
 # compile gcc flags
