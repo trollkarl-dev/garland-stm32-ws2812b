@@ -250,7 +250,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 void foo(void)
 {
-    if (1 == SmartLED_Next(&garland)) {
+    if (!SmartLED_Next(&garland)) {
         tinsel_add_task_timer(garland_routine, dummy_arg, 50);
     }
 }

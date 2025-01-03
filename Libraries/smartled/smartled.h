@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "colorspaces.h"
 
@@ -14,8 +15,6 @@ enum {
     smartled_pulse_high = 43,
     smartled_pulses_per_led = 24
 };
-
-#define SMARTLED_BUFSIZE(LENGTH) (((reset_width) + (LENGTH) * (led_width)))
 
 struct SmartLED {
     uint32_t length;
@@ -41,7 +40,7 @@ void SmartLED_Set_HSV(struct SmartLED *led, uint32_t idx, HSV_t color);
 
 void SmartLED_Flush(struct SmartLED *led);
 /* must be called in half transfer and full transfer interrupts */
-uint32_t SmartLED_Next(struct SmartLED *led);
+bool SmartLED_Next(struct SmartLED *led);
 
 #ifdef __cplusplus
 }

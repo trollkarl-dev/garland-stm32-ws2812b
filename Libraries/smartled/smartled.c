@@ -54,7 +54,7 @@ void SmartLED_Flush(struct SmartLED *led)
     led->start(led);
 }
 
-uint32_t SmartLED_Next(struct SmartLED *led)
+bool SmartLED_Next(struct SmartLED *led)
 {
     uint8_t *dst_ptr;
     uint8_t *src_ptr;
@@ -64,7 +64,7 @@ uint32_t SmartLED_Next(struct SmartLED *led)
     if (led->led_idx >= 0) {
         if (led->led_idx > led->length) {
             led->stop(led);
-            return 1;
+            return false;
         }
         
         if (led->led_idx != led->length)
@@ -84,5 +84,5 @@ uint32_t SmartLED_Next(struct SmartLED *led)
     }
     
     (led->led_idx)++;
-    return 0;
+    return true;
 }
