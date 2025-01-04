@@ -58,6 +58,8 @@ enum { garland_length = 50 };
 enum { btn_double_click_pause_ms = 200 };
 enum { dummy_arg = 0 };
 enum { garland_effect_shared_data_size = 12 };
+enum { auto_switch_period_ms = 60000 };
+enum { garland_update_period_ms = 50 };
 
 enum {
     full_hue = 360,
@@ -259,8 +261,8 @@ static const garland_effect_t garland_effects[] = {
     { running_rainbow_setup, running_rainbow_loop, NULL },
     { all_rainbow_setup, all_rainbow_loop, NULL },
     
-    { complementary_setup, complementary_loop, &(complementary_initials[0]) },
-    { complementary_setup, complementary_loop, &(complementary_initials[1]) },
+    /*{ complementary_setup, complementary_loop, &(complementary_initials[0]) },*/
+    /*{ complementary_setup, complementary_loop, &(complementary_initials[1]) },*/
     
     { perlin_setup, perlin_loop, &(perlin_initials[0]) },
     { perlin_setup, perlin_loop, &(perlin_initials[1]) },
@@ -269,6 +271,8 @@ static const garland_effect_t garland_effects[] = {
 
 static volatile uint32_t current_effect_idx = 0;
 static uint8_t garland_effect_shared_data[garland_effect_shared_data_size];
+
+static volatile bool auto_switch = false;
 
 static void garland_select_effect(uint32_t idx)
 {
@@ -309,15 +313,18 @@ static void garland_stop(struct SmartLED *garland)
     HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_4);
 }
 
-static bool btn_read(void)
-{
-    return HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_3) == GPIO_PIN_RESET;
-}
+enum {
+    garland_routine_id,
+    button_routine_id,
+    auto_switch_routine_id
+};
 
-static void btn_click_callback(uint8_t clicks)
+static void auto_switch_routine(uint32_t data)
 {
-    if (clicks == 1) {
+    if (auto_switch)
+    {
         garland_next_effect();
+        tinsel_add_task_timer(auto_switch_routine, dummy_arg, auto_switch_routine_id, auto_switch_period_ms);
     }
 }
 
@@ -329,7 +336,7 @@ static void garland_routine(uint32_t data)
 
 static void button_routine(uint32_t data)
 {
-    tinsel_add_task_timer(button_routine, dummy_arg, 1);
+    tinsel_add_task_timer(button_routine, dummy_arg, button_routine_id, 1);
     
     button_check(&btn);
 }
@@ -344,7 +351,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 static void foo(void)
 {
     if (!SmartLED_Next(&garland)) {
-        tinsel_add_task_timer(garland_routine, dummy_arg, 50);
+        tinsel_add_task_timer(garland_routine, dummy_arg, garland_routine_id, garland_update_period_ms);
     }
 }
 
@@ -359,6 +366,30 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef * htim)
 {
     if (htim == &htim3) {
         foo();
+    }
+}
+
+static bool btn_read(void)
+{
+    return HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_3) == GPIO_PIN_RESET;
+}
+
+static void btn_click_callback(uint8_t clicks)
+{
+    if (clicks == 1)
+    {
+        garland_next_effect();
+    }
+    
+    if (clicks == 2)
+    {
+        auto_switch = !auto_switch;
+
+        if (auto_switch)
+        {
+            tinsel_del_task(auto_switch_routine_id);
+            tinsel_add_task_timer(auto_switch_routine, dummy_arg, auto_switch_routine_id, auto_switch_period_ms);
+        }
     }
 }
 /* USER CODE END 0 */
