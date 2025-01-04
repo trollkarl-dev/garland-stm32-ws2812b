@@ -11,6 +11,8 @@ float perlin(uint32_t fx, uint32_t fy,
              uint32_t canvas_size_x, uint32_t canvas_size_y,
              uint32_t cell_size);
 
+float lerp(float a, float b, float t);
+
 #ifdef __cplusplus
 }
 #endif

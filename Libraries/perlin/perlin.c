@@ -110,14 +110,14 @@ static float smooth(float t)
     return quntic_curve(t);
 }
     
-static float lerp(float a, float b, float t)
+float lerp(float a, float b, float t)
 {
     return a + (b - a) * t;
 }
 
 static vec2d_t get_pseudo_random_gradient_vector(uint32_t x, uint32_t y)
 {
-    uint32_t v = (((x * 1836311903) ^ (y * 2971215073)) + 4807526976) & 1023;
+    uint32_t v = (((x * 1836311903) ^ (y * 2971215073)) + 4807526976) & (random_buf_len - 1);
     
     v = random_buf[v] & 3;
     
@@ -167,5 +167,5 @@ float perlin(uint32_t fx,
     float bx = lerp(bx1, bx2, point_in_quad_x);
     float tb = lerp(tx, bx, point_in_quad_y);
 
-    return quntic_curve((tb + 1.0f) / 2.0f);
+    return tb;
 }

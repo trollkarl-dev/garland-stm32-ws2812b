@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 
 #include "tinsel.h"
 #include "button.h"
@@ -202,29 +203,43 @@ static void perlin_setup(void *raw_data, const void *initial)
     memcpy(raw_data, initial, sizeof(perlin_data_t));
 }
 
+static float sigmoid(float x)
+{
+    const float threshold = 0.15f;
+    
+    if (fabs(x - 0.5f) < threshold)
+    {
+        return 0.5f * (1.0f + (x - 0.5f) / threshold);
+    }
+    
+    return (x < 0.5f) ? 0.0f : 1.0f;
+}
+
 static void perlin_loop(struct SmartLED *leds, void *raw_data)
 {
     perlin_data_t * const data = (perlin_data_t *) raw_data;
     uint32_t i;
+    const uint32_t vertical_size = 1048576; /* must be a power of two */
     
     for (i = 0; i < leds->length; i++)
     {
-        float coef = perlin(i, data->offset, leds->length, leds->length, 5);
+        float coef = perlin(i, data->offset, leds->length, vertical_size, 10);
+        coef = sigmoid((coef + 1.0f) / 2.0f);
 
         RGB_t color = (RGB_t)
         {
-            (uint8_t) ((float) data->col[0].r + ((float) data->col[1].r - (float) data->col[0].r) * coef),
-            (uint8_t) ((float) data->col[0].g + ((float) data->col[1].g - (float) data->col[0].g) * coef),
-            (uint8_t) ((float) data->col[0].b + ((float) data->col[1].b - (float) data->col[0].b) * coef)
+            (uint8_t) lerp((float) data->col[0].r, (float) data->col[1].r, coef),
+            (uint8_t) lerp((float) data->col[0].g, (float) data->col[1].g, coef),
+            (uint8_t) lerp((float) data->col[0].b, (float) data->col[1].b, coef)
         };
         
         SmartLED_Set_RGB(leds, i, color);
     }
     
-    data->offset = (data->offset + 1) % leds->length;
+    data->offset = (data->offset + 1) & (vertical_size - 1);
 }
 
-const complementary_data_t complementaries[] = 
+const complementary_data_t complementary_initials[] = 
 {
     /* yellow <-> blue */
     { 0, 0, {(RGB_t) {255, 128, 0}, (RGB_t) {0, 128, 255}} },
@@ -235,17 +250,21 @@ const complementary_data_t complementaries[] =
 
 static const perlin_data_t perlin_initials[] =
 {
-    { {(RGB_t) {128, 255, 0}, (RGB_t) {128, 0, 255}}, 0 }
+    { {(RGB_t) {255, 0,   255}, (RGB_t) {0,   255, 255}}, 0 },
+    { {(RGB_t) {255, 255, 0  }, (RGB_t) {0,   255, 0  }}, 0 },
+    { {(RGB_t) {0  , 255, 0  }, (RGB_t) {255, 0,   255}}, 0 }
 };
 
 static const garland_effect_t garland_effects[] = {
     { running_rainbow_setup, running_rainbow_loop, NULL },
     { all_rainbow_setup, all_rainbow_loop, NULL },
     
-    { complementary_setup, complementary_loop, &(complementaries[0]) },
-    { complementary_setup, complementary_loop, &(complementaries[1]) },
+    { complementary_setup, complementary_loop, &(complementary_initials[0]) },
+    { complementary_setup, complementary_loop, &(complementary_initials[1]) },
     
-    { perlin_setup, perlin_loop, &(perlin_initials[0]) }
+    { perlin_setup, perlin_loop, &(perlin_initials[0]) },
+    { perlin_setup, perlin_loop, &(perlin_initials[1]) },
+    { perlin_setup, perlin_loop, &(perlin_initials[2]) }
 };
 
 static volatile uint32_t current_effect_idx = 0;
