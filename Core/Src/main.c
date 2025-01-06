@@ -141,58 +141,6 @@ static void all_rainbow_loop(struct SmartLED *leds, void *raw_data)
     data->hue = (data->hue + 1) % full_hue;
 }
 
-static int32_t weight_average(int32_t a, int32_t b, int32_t coef, int32_t max_coef)
-{
-    return (a*coef + b*(max_coef - coef)) / max_coef;
-}
-
-typedef struct {
-    int8_t counter;
-    uint8_t direction;
-    RGB_t col[2];
-} complementary_data_t;
-
-STATIC_ASSERT(sizeof(complementary_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
-
-static void complementary_setup(void *raw_data, const void *initial)
-{
-    memcpy(raw_data, initial, sizeof(complementary_data_t));
-}
-
-static void complementary_loop(struct SmartLED *leds, void *raw_data)
-{
-    uint32_t i;
-    complementary_data_t * const data = (complementary_data_t *) raw_data;
-    const uint32_t period = 32;
-    
-    if (data->counter >= period && data->direction == 0)
-        data->direction = 1;
-    
-    if (data->counter <= 0 && data->direction == 1)
-        data->direction = 0;
-    
-    data->counter += data->direction ? -1 : 1;
-    
-    RGB_t color_even = (RGB_t)
-    {
-        weight_average(data->col[0].r, data->col[1].r, data->counter, period),
-        weight_average(data->col[0].g, data->col[1].g, data->counter, period),
-        weight_average(data->col[0].b, data->col[1].b, data->counter, period)
-    };
-    
-    RGB_t color_odd = (RGB_t)
-    {
-        weight_average(data->col[1].r, data->col[0].r, data->counter, period),
-        weight_average(data->col[1].g, data->col[0].g, data->counter, period),
-        weight_average(data->col[1].b, data->col[0].b, data->counter, period)
-    };
-    
-    for (i = 0; i < leds->length; i++)
-    {
-        SmartLED_Set_RGB(leds, i, (i % 2) ? color_odd : color_even);
-    }
-}
-
 typedef struct {
     RGB_t col[2];
     uint32_t offset;
@@ -241,32 +189,22 @@ static void perlin_loop(struct SmartLED *leds, void *raw_data)
     data->offset = (data->offset + 1) & (vertical_size - 1);
 }
 
-const complementary_data_t complementary_initials[] = 
-{
-    /* yellow <-> blue */
-    { 0, 0, {(RGB_t) {255, 128, 0}, (RGB_t) {0, 128, 255}} },
-    
-    /* green <-> purple */
-    { 0, 0, {(RGB_t) {128, 255, 0}, (RGB_t) {128, 0, 255}} }
-};
-
 static const perlin_data_t perlin_initials[] =
 {
     { {(RGB_t) {255, 0,   255}, (RGB_t) {0,   255, 255}}, 0 },
-    { {(RGB_t) {255, 255, 0  }, (RGB_t) {0,   255, 0  }}, 0 },
-    { {(RGB_t) {0  , 255, 0  }, (RGB_t) {255, 0,   255}}, 0 }
+    { {(RGB_t) {255, 255, 0  }, (RGB_t) {0,   255, 255}}, 0 },
+    { {(RGB_t) {0  , 255, 0  }, (RGB_t) {255, 0,   255}}, 0 },
+    { {(RGB_t) {180, 0,   0  }, (RGB_t) {255, 255, 100}}, 0 }, /* flame */
 };
 
 static const garland_effect_t garland_effects[] = {
     { running_rainbow_setup, running_rainbow_loop, NULL },
     { all_rainbow_setup, all_rainbow_loop, NULL },
     
-    /*{ complementary_setup, complementary_loop, &(complementary_initials[0]) },*/
-    /*{ complementary_setup, complementary_loop, &(complementary_initials[1]) },*/
-    
     { perlin_setup, perlin_loop, &(perlin_initials[0]) },
     { perlin_setup, perlin_loop, &(perlin_initials[1]) },
-    { perlin_setup, perlin_loop, &(perlin_initials[2]) }
+    { perlin_setup, perlin_loop, &(perlin_initials[2]) },
+    { perlin_setup, perlin_loop, &(perlin_initials[3]) },
 };
 
 static volatile uint32_t current_effect_idx = 0;
@@ -324,7 +262,10 @@ static void auto_switch_routine(uint32_t data)
     if (auto_switch)
     {
         garland_next_effect();
-        tinsel_add_task_timer(auto_switch_routine, dummy_arg, auto_switch_routine_id, auto_switch_period_ms);
+        tinsel_add_task_timer(auto_switch_routine,
+                              dummy_arg,
+                              auto_switch_routine_id,
+                              auto_switch_period_ms);
     }
 }
 
@@ -351,7 +292,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 static void foo(void)
 {
     if (!SmartLED_Next(&garland)) {
-        tinsel_add_task_timer(garland_routine, dummy_arg, garland_routine_id, garland_update_period_ms);
+        tinsel_add_task_timer(garland_routine,
+                              dummy_arg,
+                              garland_routine_id,
+                              garland_update_period_ms);
     }
 }
 
@@ -384,11 +328,14 @@ static void btn_click_callback(uint8_t clicks)
     if (clicks == 2)
     {
         auto_switch = !auto_switch;
+        tinsel_del_task(auto_switch_routine_id);
 
         if (auto_switch)
         {
-            tinsel_del_task(auto_switch_routine_id);
-            tinsel_add_task_timer(auto_switch_routine, dummy_arg, auto_switch_routine_id, auto_switch_period_ms);
+            tinsel_add_task_timer(auto_switch_routine,
+                                  dummy_arg,
+                                  auto_switch_routine_id,
+                                  auto_switch_period_ms);
         }
     }
 }
