@@ -31,6 +31,7 @@
 #include "colorspaces.h"
 #include "smartled.h"
 #include "perlin.h"
+#include "utils.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,7 +41,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define STATIC_ASSERT(COND, MSG) typedef char static_assertion_##MSG[(COND)?1:-1]
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -60,6 +61,7 @@ enum { dummy_arg = 0 };
 enum { garland_effect_shared_data_size = 12 };
 enum { auto_switch_period_ms = 60000 };
 enum { garland_update_period_ms = 50 };
+enum { garland_max_brightness = 255 };
 
 enum {
     full_hue = 360,
@@ -95,7 +97,7 @@ typedef struct {
     uint32_t hue;
 } running_rainbow_data_t;
 
-STATIC_ASSERT(sizeof(running_rainbow_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
+STATIC_ASSERT(sizeof(running_rainbow_data_t) <= garland_effect_shared_data_size);
 
 static void running_rainbow_setup(void *raw_data, const void *initial)
 {
@@ -121,7 +123,7 @@ typedef struct {
     uint32_t hue;
 } all_rainbow_data_t;
 
-STATIC_ASSERT(sizeof(all_rainbow_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
+STATIC_ASSERT(sizeof(all_rainbow_data_t) <= garland_effect_shared_data_size);
 
 static void all_rainbow_setup(void *raw_data, const void *initial)
 {
@@ -146,7 +148,7 @@ typedef struct {
     uint32_t offset;
 } perlin_data_t;
 
-STATIC_ASSERT(sizeof(perlin_data_t) <= garland_effect_shared_data_size, garland_effect_shared_data_overflow);
+STATIC_ASSERT(sizeof(perlin_data_t) <= garland_effect_shared_data_size);
 
 static void perlin_setup(void *raw_data, const void *initial)
 {
@@ -210,7 +212,7 @@ static const garland_effect_t garland_effects[] = {
 static volatile uint32_t current_effect_idx = 0;
 static uint8_t garland_effect_shared_data[garland_effect_shared_data_size];
 
-static volatile bool auto_switch = false;
+static volatile bool auto_switch = true;
 
 static void garland_select_effect(uint32_t idx)
 {
@@ -251,21 +253,15 @@ static void garland_stop(struct SmartLED *garland)
     HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_4);
 }
 
-enum {
-    garland_routine_id,
-    button_routine_id,
-    auto_switch_routine_id
-};
-
 static void auto_switch_routine(uint32_t data)
 {
+    tinsel_add_task_timer(auto_switch_routine,
+                          dummy_arg,
+                          auto_switch_period_ms);
+
     if (auto_switch)
     {
         garland_next_effect();
-        tinsel_add_task_timer(auto_switch_routine,
-                              dummy_arg,
-                              auto_switch_routine_id,
-                              auto_switch_period_ms);
     }
 }
 
@@ -277,7 +273,7 @@ static void garland_routine(uint32_t data)
 
 static void button_routine(uint32_t data)
 {
-    tinsel_add_task_timer(button_routine, dummy_arg, button_routine_id, 1);
+    tinsel_add_task_timer(button_routine, dummy_arg, 1);
     
     button_check(&btn);
 }
@@ -294,7 +290,6 @@ static void foo(void)
     if (!SmartLED_Next(&garland)) {
         tinsel_add_task_timer(garland_routine,
                               dummy_arg,
-                              garland_routine_id,
                               garland_update_period_ms);
     }
 }
@@ -328,15 +323,6 @@ static void btn_click_callback(uint8_t clicks)
     if (clicks == 2)
     {
         auto_switch = !auto_switch;
-        tinsel_del_task(auto_switch_routine_id);
-
-        if (auto_switch)
-        {
-            tinsel_add_task_timer(auto_switch_routine,
-                                  dummy_arg,
-                                  auto_switch_routine_id,
-                                  auto_switch_period_ms);
-        }
     }
 }
 /* USER CODE END 0 */
@@ -374,6 +360,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   SmartLED_Init(&garland,
                 garland_length,
+                garland_max_brightness,
                 leds_buffer,
                 pulses_buffer,
                 garland_start,
@@ -389,6 +376,7 @@ int main(void)
   tinsel_init();
   tinsel_add_task(garland_routine, dummy_arg);
   tinsel_add_task(button_routine, dummy_arg);
+  tinsel_add_task_timer(auto_switch_routine, dummy_arg, auto_switch_period_ms);
   
   HAL_TIM_Base_Start_IT(&htim17);
   

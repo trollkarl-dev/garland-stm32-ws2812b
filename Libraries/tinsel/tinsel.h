@@ -19,8 +19,7 @@ uint32_t tinsel_run();
 void tinsel_timer_check(); /* must be called in time-based ISR */
 
 void tinsel_add_task(tinsel_task_worker routine, uint32_t data);
-uint32_t tinsel_add_task_timer(tinsel_task_worker routine, uint32_t data, uint32_t id, uint32_t period);
-void tinsel_del_task(uint32_t id);
+uint32_t tinsel_add_task_timer(tinsel_task_worker routine, uint32_t data, uint32_t period);
 
 #ifdef __cplusplus
 }

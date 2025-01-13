@@ -19,6 +19,7 @@ enum {
 struct SmartLED {
     uint32_t length;
     int32_t led_idx;
+    uint8_t brightness;
     uint8_t *leds_buffer;
     uint8_t *pulses_buffer;
     
@@ -28,6 +29,7 @@ struct SmartLED {
 
 void SmartLED_Init(struct SmartLED *led,
                    uint32_t length,
+                   uint8_t brightness,
                    uint8_t *leds_buffer,
                    uint8_t *pulses_buffer,
                    void (*start)(struct SmartLED *led),
@@ -37,6 +39,7 @@ void SmartLED_Clear(struct SmartLED *led);
 
 void SmartLED_Set_RGB(struct SmartLED *led, uint32_t idx, RGB_t color);
 void SmartLED_Set_HSV(struct SmartLED *led, uint32_t idx, HSV_t color);
+void SmartLED_Set_Brightness(struct SmartLED *led, uint8_t brightness);
 
 void SmartLED_Flush(struct SmartLED *led);
 /* must be called in half transfer and full transfer interrupts */

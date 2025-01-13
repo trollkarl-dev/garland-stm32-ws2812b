@@ -6,7 +6,6 @@
 struct tinsel_timer {
     uint32_t counter;
     uint32_t data;
-    uint32_t id;
     tinsel_task_worker worker;
 };
 
@@ -46,7 +45,7 @@ void tinsel_add_task(tinsel_task_worker routine, uint32_t data)
     __enable_irq();
 }
 
-uint32_t tinsel_add_task_timer(tinsel_task_worker routine, uint32_t data, uint32_t id, uint32_t period)
+uint32_t tinsel_add_task_timer(tinsel_task_worker routine, uint32_t data, uint32_t period)
 {
     uint32_t i;
     uint32_t result = 1;
@@ -59,7 +58,6 @@ uint32_t tinsel_add_task_timer(tinsel_task_worker routine, uint32_t data, uint32
             tinsel_timers_list[i].worker = routine;
             tinsel_timers_list[i].data = data;
             tinsel_timers_list[i].counter = period;
-            tinsel_timers_list[i].id = id;
             
             result = 0;
             break;
@@ -70,25 +68,6 @@ uint32_t tinsel_add_task_timer(tinsel_task_worker routine, uint32_t data, uint32
     
     return result;
 }
-
-void tinsel_del_task(uint32_t id)
-{
-    uint32_t i;
-    
-    __disable_irq();
-    
-    for (i = 0; i < tinsel_max_timers; i++)
-    {
-        if (tinsel_timers_list[i].worker != NULL &&
-            tinsel_timers_list[i].id == id)
-        {
-            tinsel_timers_list[i].worker = NULL;
-        }
-    }
-    
-    __enable_irq();
-}
-
 uint32_t tinsel_run()
 {
     tinsel_task_worker curr_worker;

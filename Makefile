@@ -127,7 +127,8 @@ C_INCLUDES =  \
 -ILibraries/colorspaces \
 -ILibraries/tinsel \
 -ILibraries/button \
--ILibraries/perlin
+-ILibraries/perlin \
+-ILibraries/utils
 
 
 # compile gcc flags
