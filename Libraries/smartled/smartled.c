@@ -62,6 +62,11 @@ void SmartLED_Set_Brightness(struct SmartLED *led, uint8_t brightness)
     led->brightness = brightness;
 }
 
+uint8_t SmartLED_Get_Brightness(struct SmartLED *led)
+{
+    return led->brightness;
+}
+
 static uint8_t SmartLED_Brightness_Scale(uint8_t color, uint8_t brightness)
 {
     return ((uint32_t) color * (uint32_t) (brightness + 1)) >> 8;

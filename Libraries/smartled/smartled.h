@@ -39,7 +39,9 @@ void SmartLED_Clear(struct SmartLED *led);
 
 void SmartLED_Set_RGB(struct SmartLED *led, uint32_t idx, RGB_t color);
 void SmartLED_Set_HSV(struct SmartLED *led, uint32_t idx, HSV_t color);
+
 void SmartLED_Set_Brightness(struct SmartLED *led, uint8_t brightness);
+uint8_t SmartLED_Get_Brightness(struct SmartLED *led);
 
 void SmartLED_Flush(struct SmartLED *led);
 /* must be called in half transfer and full transfer interrupts */

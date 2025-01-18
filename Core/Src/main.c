@@ -59,9 +59,8 @@ enum { garland_length = 50 };
 enum { btn_double_click_pause_ms = 200 };
 enum { dummy_arg = 0 };
 enum { garland_effect_shared_data_size = 12 };
-enum { auto_switch_period_ms = 60000 };
 enum { garland_update_period_ms = 50 };
-enum { garland_max_brightness = 255 };
+enum { garland_default_brightness = 255 };
 
 enum {
     full_hue = 360,
@@ -212,8 +211,6 @@ static const garland_effect_t garland_effects[] = {
 static volatile uint32_t current_effect_idx = 0;
 static uint8_t garland_effect_shared_data[garland_effect_shared_data_size];
 
-static volatile bool auto_switch = true;
-
 static void garland_select_effect(uint32_t idx)
 {
     current_effect_idx = idx;
@@ -253,15 +250,77 @@ static void garland_stop(struct SmartLED *garland)
     HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_4);
 }
 
+enum { auto_switch_check_period_ms = 10 };
+enum { auto_switch_delay_period_ms = 60000 };
+enum { auto_switch_brightness_step = 1 };
+
+typedef enum {
+    auto_switch_state_initial,
+    auto_switch_state_wait_for_falling,
+    auto_switch_state_falling,
+    auto_switch_state_rising
+} auto_switch_state_t;
+
+static volatile bool auto_switch_flag = true;
+static volatile uint32_t auto_switch_counter;
+static volatile auto_switch_state_t auto_switch_state = auto_switch_state_initial;
+
 static void auto_switch_routine(uint32_t data)
 {
-    tinsel_add_task_timer(auto_switch_routine,
-                          dummy_arg,
-                          auto_switch_period_ms);
+    tinsel_add_task_timer(auto_switch_routine, dummy_arg, auto_switch_check_period_ms);
 
-    if (auto_switch)
+    if (!auto_switch_flag)
     {
-        garland_next_effect();
+        if (SmartLED_Get_Brightness(&garland) != garland_default_brightness)
+        {
+            SmartLED_Set_Brightness(&garland, garland_default_brightness);
+            auto_switch_state = auto_switch_state_initial;
+        }
+
+        return;
+    }
+
+    switch (auto_switch_state)
+    {
+        case auto_switch_state_initial:
+            auto_switch_counter = auto_switch_delay_period_ms / auto_switch_check_period_ms;
+            auto_switch_state = auto_switch_state_wait_for_falling;
+            break;
+
+        case auto_switch_state_wait_for_falling:
+            if (!auto_switch_counter)
+                auto_switch_state = auto_switch_state_falling;
+            else
+                auto_switch_counter--;
+            break;
+
+        case auto_switch_state_falling:
+            if (SmartLED_Get_Brightness(&garland) > auto_switch_brightness_step)
+            {
+                SmartLED_Set_Brightness(&garland, SmartLED_Get_Brightness(&garland) - auto_switch_brightness_step);
+            }
+            else
+            {
+                SmartLED_Set_Brightness(&garland, 0);
+                garland_next_effect();
+                auto_switch_state = auto_switch_state_rising;
+            }
+
+            break;
+
+        case auto_switch_state_rising:
+            if (SmartLED_Get_Brightness(&garland) < garland_default_brightness - auto_switch_brightness_step)
+            {
+                SmartLED_Set_Brightness(&garland, SmartLED_Get_Brightness(&garland) + auto_switch_brightness_step);
+            }
+            else
+            {
+                SmartLED_Set_Brightness(&garland, garland_default_brightness);
+                auto_switch_counter = auto_switch_delay_period_ms / auto_switch_check_period_ms;
+                auto_switch_state = auto_switch_state_wait_for_falling;
+            }
+
+            break;
     }
 }
 
@@ -317,12 +376,14 @@ static void btn_click_callback(uint8_t clicks)
 {
     if (clicks == 1)
     {
+        auto_switch_state = auto_switch_state_initial;
+        SmartLED_Set_Brightness(&garland, garland_default_brightness);
         garland_next_effect();
     }
     
     if (clicks == 2)
     {
-        auto_switch = !auto_switch;
+        auto_switch_flag = !auto_switch_flag;
     }
 }
 /* USER CODE END 0 */
@@ -360,7 +421,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   SmartLED_Init(&garland,
                 garland_length,
-                garland_max_brightness,
+                garland_default_brightness,
                 leds_buffer,
                 pulses_buffer,
                 garland_start,
@@ -376,7 +437,7 @@ int main(void)
   tinsel_init();
   tinsel_add_task(garland_routine, dummy_arg);
   tinsel_add_task(button_routine, dummy_arg);
-  tinsel_add_task_timer(auto_switch_routine, dummy_arg, auto_switch_period_ms);
+  tinsel_add_task(auto_switch_routine, dummy_arg);
   
   HAL_TIM_Base_Start_IT(&htim17);
   
