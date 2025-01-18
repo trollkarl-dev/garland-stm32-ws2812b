@@ -283,6 +283,7 @@ static void auto_switch_routine(uint32_t data)
     switch (auto_switch_state)
     {
         case auto_switch_state_initial:
+            SmartLED_Set_Brightness(&garland, garland_default_brightness);
             auto_switch_counter = auto_switch_delay_period_ms / auto_switch_check_period_ms;
             auto_switch_state = auto_switch_state_wait_for_falling;
             break;
@@ -377,7 +378,6 @@ static void btn_click_callback(uint8_t clicks)
     if (clicks == 1)
     {
         auto_switch_state = auto_switch_state_initial;
-        SmartLED_Set_Brightness(&garland, garland_default_brightness);
         garland_next_effect();
     }
     
