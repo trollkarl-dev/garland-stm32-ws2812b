@@ -41,7 +41,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define ABS(A) (((A) < 0) ? (-(A)) : (A))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -68,10 +68,7 @@ enum {
     max_value = 100
 };
 
-static struct SmartLED garland;
-
-static uint8_t leds_buffer[garland_length * 3];
-static uint8_t pulses_buffer[smartled_pulses_per_led * 2];
+SMARTLED_DEF(garland, garland_length);
 
 struct button btn;
 /* USER CODE END PV */
@@ -83,8 +80,29 @@ static void MX_DMA_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM17_Init(void);
 /* USER CODE BEGIN PFP */
+static uint32_t lfsr_seed = 0xDEADBEEF;
+
+static void lfsr_srand(uint32_t seed)
+{
+	lfsr_seed = seed;
+}
+
+static uint32_t lfsr_rand(void)
+{
+	lfsr_seed = (lfsr_seed << 1) | (((lfsr_seed >> 1) & 1) ^
+			                ((lfsr_seed >> 5) & 1) ^
+					((lfsr_seed >> 6) & 1) ^
+					((lfsr_seed >> 31) & 1));
+
+	return lfsr_seed;
+}
+
+/***************************************************************************/
+/*                                 Effects                                 */
+/***************************************************************************/
+
 typedef void (*garland_setup_handler)(void *, const void *);
-typedef void (*garland_loop_handler)(struct SmartLED *, void *);
+typedef void (*garland_loop_handler)(smartled_t *, void *);
 
 typedef struct {
     garland_setup_handler setup;
@@ -105,14 +123,14 @@ static void running_rainbow_setup(void *raw_data, const void *initial)
     data->hue = 0;
 }
 
-static void running_rainbow_loop(struct SmartLED *leds, void *raw_data)
+static void running_rainbow_loop(smartled_t *leds, void *raw_data)
 {
     uint32_t i;
     running_rainbow_data_t * const data = (running_rainbow_data_t *) raw_data;
     
     for (i = 0; i < leds->length; i++)
     {
-        SmartLED_Set_HSV(leds, i, hsv((data->hue+i) % full_hue, max_whiteness, max_value));
+        smartled_set_hsv(leds, i, hsv((data->hue+i) % full_hue, max_whiteness, max_value));
     }
         
     data->hue = (data->hue + 6) % full_hue;
@@ -131,13 +149,13 @@ static void all_rainbow_setup(void *raw_data, const void *initial)
     data->hue = 0;
 }
 
-static void all_rainbow_loop(struct SmartLED *leds, void *raw_data)
+static void all_rainbow_loop(smartled_t *leds, void *raw_data)
 {
     uint32_t i;
     all_rainbow_data_t * const data = (all_rainbow_data_t *) raw_data;
     
     for (i = 0; i < leds->length; i++)
-        SmartLED_Set_HSV(leds, i, hsv(data->hue, max_whiteness, max_value));
+        smartled_set_hsv(leds, i, hsv(data->hue, max_whiteness, max_value));
         
     data->hue = (data->hue + 1) % full_hue;
 }
@@ -166,7 +184,7 @@ static float sigmoid(float x)
     return (x < 0.5f) ? 0.0f : 1.0f;
 }
 
-static void perlin_loop(struct SmartLED *leds, void *raw_data)
+static void perlin_loop(smartled_t *leds, void *raw_data)
 {
     perlin_data_t * const data = (perlin_data_t *) raw_data;
     uint32_t i;
@@ -184,11 +202,73 @@ static void perlin_loop(struct SmartLED *leds, void *raw_data)
             (uint8_t) lerp((float) data->col[0].b, (float) data->col[1].b, coef)
         };
         
-        SmartLED_Set_RGB(leds, i, color);
+        smartled_set_rgb(leds, i, color);
     }
     
     data->offset = (data->offset + 1) & (vertical_size - 1);
 }
+
+typedef struct {
+    uint32_t counter;
+} running_shadow_data_t;
+
+STATIC_ASSERT(sizeof(running_shadow_data_t) <= garland_effect_shared_data_size);
+
+static void running_shadow_setup(void *raw_data, const void *initial)
+{
+    running_shadow_data_t * const data = (running_shadow_data_t *) raw_data;
+    data->counter = 0;
+}
+
+static void running_shadow_loop(smartled_t *leds, void *raw_data)
+{
+    uint32_t i;
+    running_shadow_data_t * const data = (running_shadow_data_t *) raw_data;
+
+    for (i = 0; i < leds->length; i++)
+    {
+        int val = ABS((int) data->counter - (int) i);
+	int hue, value;
+
+	val = val > leds->length / 2 ? leds->length - val : val;
+
+	hue = (int) ((float) i / leds->length * full_hue);
+	value = (int) ((float) val / (leds->length / 2) * max_value);
+
+	smartled_set_hsv(leds, i, hsv(hue, max_whiteness, value));
+
+    }
+
+    data->counter = (data->counter + 1) % leds->length;
+}
+
+/****************************************************************************/
+typedef struct {
+    uint32_t counter;
+} running_rainbow_from_middle_data_t;
+
+STATIC_ASSERT(sizeof(running_rainbow_from_middle_data_t) <= garland_effect_shared_data_size);
+
+static void running_rainbow_from_middle_setup(void *raw_data, const void *initial)
+{
+    running_shadow_data_t * const data = (running_shadow_data_t *) raw_data;
+    data->counter = 0;
+}
+
+static void running_rainbow_from_middle_loop(smartled_t *leds, void *raw_data)
+{
+    running_shadow_data_t * const data = (running_shadow_data_t *) raw_data;
+    uint32_t i;
+
+    for (i = 0; i < leds->length; i++)
+    {
+	    int hue = (float) ((ABS((int) i - (int) (leds->length / 2)) + data->counter) % leds->length) / leds->length * full_hue;
+	    smartled_set_hsv(leds, i, hsv(hue, max_whiteness, max_value));
+    }
+
+    data->counter = (data->counter + 1) % leds->length;
+}
+/****************************************************************************/
 
 static const perlin_data_t perlin_initials[] =
 {
@@ -206,6 +286,9 @@ static const garland_effect_t garland_effects[] = {
     { perlin_setup, perlin_loop, &(perlin_initials[1]) },
     { perlin_setup, perlin_loop, &(perlin_initials[2]) },
     { perlin_setup, perlin_loop, &(perlin_initials[3]) },
+
+    { running_shadow_setup, running_shadow_loop, NULL },
+    { running_rainbow_from_middle_setup, running_rainbow_from_middle_loop, NULL }
 };
 
 static volatile uint32_t current_effect_idx = 0;
@@ -217,14 +300,13 @@ static void garland_select_effect(uint32_t idx)
     (garland_effects[idx].setup)(garland_effect_shared_data, garland_effects[idx].initial);
 }
 
-static void garland_next_effect(void)
+static void garland_next_effect(bool random_choice)
 {
-    uint32_t idx = current_effect_idx + 1;
+    uint32_t idx = random_choice
+	           ? lfsr_rand()
+		   : current_effect_idx + 1;
 
-    if (idx >= sizeof(garland_effects) / sizeof(garland_effects[0]))
-    {
-        idx = 0;
-    }
+    idx %= (sizeof(garland_effects) / sizeof(garland_effects[0]));
 
     garland_select_effect(idx);
 }
@@ -237,15 +319,15 @@ static void garland_play_currect_effect(void)
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static void garland_start(struct SmartLED *garland)
+static void garland_start(smartled_t *garland)
 {
     HAL_TIM_PWM_Start_DMA(&htim3,
                           TIM_CHANNEL_4,
                           (uint32_t *) garland->pulses_buffer,
-                          2 * smartled_pulses_per_led);
+                          2 * SMARTLED_PULSES_PER_LED);
 }
 
-static void garland_stop(struct SmartLED *garland)
+static void garland_stop(smartled_t *garland)
 {
     HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_4);
 }
@@ -261,6 +343,7 @@ typedef enum {
     auto_switch_state_rising
 } auto_switch_state_t;
 
+static const bool random_effect_choice = true;
 static volatile bool auto_switch_flag = true;
 static volatile uint32_t auto_switch_counter;
 static volatile auto_switch_state_t auto_switch_state = auto_switch_state_initial;
@@ -271,9 +354,9 @@ static void auto_switch_routine(uint32_t data)
 
     if (!auto_switch_flag)
     {
-        if (SmartLED_Get_Brightness(&garland) != garland_default_brightness)
+        if (smartled_get_brightness(&garland) != garland_default_brightness)
         {
-            SmartLED_Set_Brightness(&garland, garland_default_brightness);
+            smartled_set_brightness(&garland, garland_default_brightness);
             auto_switch_state = auto_switch_state_initial;
         }
 
@@ -283,7 +366,7 @@ static void auto_switch_routine(uint32_t data)
     switch (auto_switch_state)
     {
         case auto_switch_state_initial:
-            SmartLED_Set_Brightness(&garland, garland_default_brightness);
+            smartled_set_brightness(&garland, garland_default_brightness);
             auto_switch_counter = auto_switch_delay_period_ms / auto_switch_check_period_ms;
             auto_switch_state = auto_switch_state_wait_for_falling;
             break;
@@ -296,27 +379,27 @@ static void auto_switch_routine(uint32_t data)
             break;
 
         case auto_switch_state_falling:
-            if (SmartLED_Get_Brightness(&garland) > auto_switch_brightness_step)
+            if (smartled_get_brightness(&garland) > auto_switch_brightness_step)
             {
-                SmartLED_Set_Brightness(&garland, SmartLED_Get_Brightness(&garland) - auto_switch_brightness_step);
+                smartled_set_brightness(&garland, smartled_get_brightness(&garland) - auto_switch_brightness_step);
             }
             else
             {
-                SmartLED_Set_Brightness(&garland, 0);
-                garland_next_effect();
+                smartled_set_brightness(&garland, 0);
+                garland_next_effect(random_effect_choice);
                 auto_switch_state = auto_switch_state_rising;
             }
 
             break;
 
         case auto_switch_state_rising:
-            if (SmartLED_Get_Brightness(&garland) < garland_default_brightness - auto_switch_brightness_step)
+            if (smartled_get_brightness(&garland) < garland_default_brightness - auto_switch_brightness_step)
             {
-                SmartLED_Set_Brightness(&garland, SmartLED_Get_Brightness(&garland) + auto_switch_brightness_step);
+                smartled_set_brightness(&garland, smartled_get_brightness(&garland) + auto_switch_brightness_step);
             }
             else
             {
-                SmartLED_Set_Brightness(&garland, garland_default_brightness);
+                smartled_set_brightness(&garland, garland_default_brightness);
                 auto_switch_counter = auto_switch_delay_period_ms / auto_switch_check_period_ms;
                 auto_switch_state = auto_switch_state_wait_for_falling;
             }
@@ -328,7 +411,7 @@ static void auto_switch_routine(uint32_t data)
 static void garland_routine(uint32_t data)
 {
     garland_play_currect_effect();
-    SmartLED_Flush(&garland);
+    smartled_flush(&garland);
 }
 
 static void button_routine(uint32_t data)
@@ -347,7 +430,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 static void foo(void)
 {
-    if (!SmartLED_Next(&garland)) {
+    if (!smartled_next(&garland)) {
         tinsel_add_task_timer(garland_routine,
                               dummy_arg,
                               garland_update_period_ms);
@@ -378,13 +461,20 @@ static void btn_click_callback(uint8_t clicks)
     if (clicks == 1)
     {
         auto_switch_state = auto_switch_state_initial;
-        garland_next_effect();
+        garland_next_effect(!random_effect_choice);
     }
     
     if (clicks == 2)
     {
+        auto_switch_state = auto_switch_state_initial;
+        garland_next_effect(random_effect_choice);
+    }
+/*
+    if (clicks == 3)
+    {
         auto_switch_flag = !auto_switch_flag;
     }
+*/
 }
 /* USER CODE END 0 */
 
@@ -419,14 +509,14 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM17_Init();
   /* USER CODE BEGIN 2 */
-  SmartLED_Init(&garland,
-                garland_length,
+  lfsr_srand(1);
+
+  smartled_init(&garland,
+                SMARTLED_RGB,
                 garland_default_brightness,
-                leds_buffer,
-                pulses_buffer,
                 garland_start,
                 garland_stop);
-  
+
   button_init(&btn,
               btn_double_click_pause_ms,
               btn_read,

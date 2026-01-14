@@ -1,33 +1,28 @@
 #include "smartled.h"
 #include <string.h>
 
-void SmartLED_Init(struct SmartLED *led,
-                   uint32_t length,
+void smartled_init(smartled_t *led,
+                   smartled_color_format_t color_format,
                    uint8_t brightness,
-                   uint8_t *leds_buffer,
-                   uint8_t *pulses_buffer,
-                   void (*start)(struct SmartLED *led),
-                   void (*stop)(struct SmartLED *led))
+                   void (*start)(smartled_t *led),
+                   void (*stop)(smartled_t *led))
 {
-    led->length = length;
+    led->color_format = color_format;
     led->brightness = brightness;
-    
-    led->leds_buffer = leds_buffer;
-    led->pulses_buffer = pulses_buffer;
     
     led->start = start;
     led->stop = stop;
     
-    SmartLED_Clear(led);
+    smartled_clear(led);
 }
 
-void SmartLED_Clear(struct SmartLED *led)
+void smartled_clear(smartled_t *led)
 {
     uint32_t i;
     RGB_t black = rgb(0, 0, 0);
     
     for (i = 0; i < led->length; i++) {
-        SmartLED_Set_RGB(led, i, black);
+        smartled_set_rgb(led, i, black);
     }
 }
 
@@ -36,43 +31,58 @@ static uint8_t gamma_correction(uint8_t data)
     return ((uint32_t) data * (uint32_t) (data + 1)) / 256;
 }
 
-void SmartLED_Set_RGB(struct SmartLED *led, uint32_t idx, RGB_t color)
+void smartled_set_rgb(smartled_t *led, uint32_t idx, RGB_t color)
 {
-    uint8_t *dst_ptr = led->leds_buffer + 3 * idx;
+    uint8_t *dst_ptr = led->leds_buffer + SMARTLED_BYTES_PER_LED * idx;
     
-    dst_ptr[0] = gamma_correction(color.r);
-    dst_ptr[1] = gamma_correction(color.g);
-    dst_ptr[2] = gamma_correction(color.b);
+    uint8_t red =   gamma_correction(color.r);
+    uint8_t green = gamma_correction(color.g);
+    uint8_t blue =  gamma_correction(color.b);
+    
+    switch (led->color_format)
+    {
+        case SMARTLED_GRB:
+            dst_ptr[0] = green;
+            dst_ptr[1] = red;
+            dst_ptr[2] = blue;
+            break;
+        
+        default: /* RGB */
+            dst_ptr[0] = red;
+            dst_ptr[1] = green;
+            dst_ptr[2] = blue;
+            break;
+    }
 }
 
-void SmartLED_Set_HSV(struct SmartLED *led, uint32_t idx, HSV_t color)
+void smartled_set_hsv(smartled_t *led, uint32_t idx, HSV_t color)
 {
-    SmartLED_Set_RGB(led, idx, hsv2rgb(color));
+    smartled_set_rgb(led, idx, hsv2rgb(color));
 }
 
-void SmartLED_Flush(struct SmartLED *led)
+void smartled_flush(smartled_t *led)
 {
     led->led_idx = -2;
-    memset(led->pulses_buffer, 0, 2 * smartled_pulses_per_led);
+    memset(led->pulses_buffer, 0, 2 * SMARTLED_PULSES_PER_LED);
     led->start(led);
 }
 
-void SmartLED_Set_Brightness(struct SmartLED *led, uint8_t brightness)
+void smartled_set_brightness(smartled_t *led, uint8_t brightness)
 {
     led->brightness = brightness;
 }
 
-uint8_t SmartLED_Get_Brightness(struct SmartLED *led)
+uint8_t smartled_get_brightness(smartled_t *led)
 {
     return led->brightness;
 }
 
-static uint8_t SmartLED_Brightness_Scale(uint8_t color, uint8_t brightness)
+static uint8_t smartled_brightness_scale(uint8_t color, uint8_t brightness)
 {
     return ((uint32_t) color * (uint32_t) (brightness + 1)) >> 8;
 }
 
-bool SmartLED_Next(struct SmartLED *led)
+bool smartled_next(smartled_t *led)
 {
     uint8_t *dst_ptr;
     uint8_t *src_ptr;
@@ -87,16 +97,16 @@ bool SmartLED_Next(struct SmartLED *led)
         
         if (led->led_idx != led->length)
         {
-            dst_ptr = led->pulses_buffer + (led->led_idx % 2) * smartled_pulses_per_led;
-            src_ptr = led->leds_buffer + 3 * led->led_idx;
+            dst_ptr = led->pulses_buffer + (led->led_idx % 2) * SMARTLED_PULSES_PER_LED;
+            src_ptr = led->leds_buffer + SMARTLED_BYTES_PER_LED * led->led_idx;
             
-            color_bits = (((uint32_t) SmartLED_Brightness_Scale(src_ptr[0], led->brightness)) << 16) |
-                         (((uint32_t) SmartLED_Brightness_Scale(src_ptr[1], led->brightness)) <<  8) |
-                         (((uint32_t) SmartLED_Brightness_Scale(src_ptr[2], led->brightness)) <<  0);
+            color_bits = (((uint32_t) smartled_brightness_scale(src_ptr[0], led->brightness)) << 16) |
+                         (((uint32_t) smartled_brightness_scale(src_ptr[1], led->brightness)) <<  8) |
+                         (((uint32_t) smartled_brightness_scale(src_ptr[2], led->brightness)) <<  0);
             
             do {
-                *dst_ptr++ = (color_bits & bit_mask) ? smartled_pulse_high
-                                                     : smartled_pulse_low;
+                *dst_ptr++ = (color_bits & bit_mask) ? SMARTLED_PULSE_HIGH_DURATION
+                                                     : SMARTLED_PULSE_LOW_DURATION;
             } while (bit_mask >>= 1);
         }
     }
