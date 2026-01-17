@@ -343,7 +343,7 @@ typedef enum {
     auto_switch_state_rising
 } auto_switch_state_t;
 
-static const bool random_effect_choice = true;
+static const bool random_effect_choice = false;
 static volatile bool auto_switch_flag = true;
 static volatile uint32_t auto_switch_counter;
 static volatile auto_switch_state_t auto_switch_state = auto_switch_state_initial;
@@ -461,13 +461,13 @@ static void btn_click_callback(uint8_t clicks)
     if (clicks == 1)
     {
         auto_switch_state = auto_switch_state_initial;
-        garland_next_effect(!random_effect_choice);
+        garland_next_effect(false);
     }
     
     if (clicks == 2)
     {
         auto_switch_state = auto_switch_state_initial;
-        garland_next_effect(random_effect_choice);
+        garland_next_effect(true);
     }
 /*
     if (clicks == 3)
