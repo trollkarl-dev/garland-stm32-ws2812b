@@ -242,7 +242,6 @@ static void running_shadow_loop(smartled_t *leds, void *raw_data)
     data->counter = (data->counter + 1) % leds->length;
 }
 
-/****************************************************************************/
 typedef struct {
     uint32_t counter;
 } running_rainbow_from_middle_data_t;
@@ -268,6 +267,60 @@ static void running_rainbow_from_middle_loop(smartled_t *leds, void *raw_data)
 
     data->counter = (data->counter + 1) % leds->length;
 }
+
+/****************************************************************************/
+typedef struct {
+    uint16_t counter;
+    uint16_t hue;
+    uint16_t direction;
+} stepping_colors_data_t;
+
+STATIC_ASSERT(sizeof(stepping_colors_data_t) <= garland_effect_shared_data_size);
+
+static void stepping_colors_setup(void *raw_data, const void *initial)
+{
+    stepping_colors_data_t * const data = (stepping_colors_data_t *) raw_data;
+
+    data->counter = 0;
+    data->hue = 0;
+    data->direction = 0;
+}
+
+static void stepping_colors_loop(smartled_t *leds, void *raw_data)
+{
+    stepping_colors_data_t * const data = (stepping_colors_data_t *) raw_data;
+    int32_t i;
+
+    if (data->direction)
+    {
+        for (i = leds->length; i >= 0; i--)
+	{
+	    HSV_t color = i > (int32_t) leds->length - (int32_t) data->counter
+		          ? hsv(data->hue, max_whiteness, max_whiteness)
+			  : hsv(0, 0, 0);
+            smartled_set_hsv(leds, i, color);
+	}
+    }
+    else
+    {
+
+        for (i = 0; i < leds->length; i++)
+	{
+	    HSV_t color = i <= (int32_t) data->counter
+		          ? hsv(data->hue, max_whiteness, max_whiteness)
+			  : hsv(0, 0, 0);
+            smartled_set_hsv(leds, i, color);
+	}
+    }
+
+    data->counter = (data->counter + 1) % leds->length;
+
+    if (data->counter == 0)
+    {
+        data->direction ^= 1;
+	data->hue = (data->hue + full_hue / 12) % full_hue;
+    }
+}
 /****************************************************************************/
 
 static const perlin_data_t perlin_initials[] =
@@ -288,7 +341,8 @@ static const garland_effect_t garland_effects[] = {
     { perlin_setup, perlin_loop, &(perlin_initials[3]) },
 
     { running_shadow_setup, running_shadow_loop, NULL },
-    { running_rainbow_from_middle_setup, running_rainbow_from_middle_loop, NULL }
+    { running_rainbow_from_middle_setup, running_rainbow_from_middle_loop, NULL },
+    { stepping_colors_setup, stepping_colors_loop, NULL }
 };
 
 static volatile uint32_t current_effect_idx = 0;
