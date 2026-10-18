@@ -61,7 +61,8 @@ Libraries/smartled/smartled.c \
 Libraries/colorspaces/colorspaces.c \
 Libraries/tinsel/tinsel.c \
 Libraries/button/button.c \
-Libraries/perlin/perlin.c
+Libraries/perlin/perlin.c \
+Libraries/effects_service/effects_service.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -128,7 +129,8 @@ C_INCLUDES =  \
 -ILibraries/tinsel \
 -ILibraries/button \
 -ILibraries/perlin \
--ILibraries/utils
+-ILibraries/utils \
+-ILibraries/effects_service
 
 
 # compile gcc flags
