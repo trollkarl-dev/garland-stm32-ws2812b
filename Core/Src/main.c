@@ -48,7 +48,7 @@ TIM_HandleTypeDef htim17;
 DMA_HandleTypeDef hdma_tim3_ch4_up;
 
 /* USER CODE BEGIN PV */
-enum { garland_length = 50 };
+enum { garland_length = 22 };
 enum { btn_double_click_pause_ms = 200 };
 enum { dummy_arg = 0 };
 enum { garland_update_period_ms = 50 };
@@ -336,7 +336,7 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   smartled_init(&garland,
-                SMARTLED_RGB,
+                SMARTLED_GRB,
                 garland_default_brightness,
                 garland_start,
                 garland_stop);

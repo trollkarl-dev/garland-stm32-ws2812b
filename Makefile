@@ -62,7 +62,7 @@ Libraries/colorspaces/colorspaces.c \
 Libraries/tinsel/tinsel.c \
 Libraries/button/button.c \
 Libraries/perlin/perlin.c \
-Libraries/effects_service/effects_service.c \
+Core/Src/effects_service.c \
 Libraries/NEC/nec.c \
 Core/Src/sysmem.c \
 Core/Src/syscalls.c
@@ -133,7 +133,6 @@ C_INCLUDES =  \
 -ILibraries/button \
 -ILibraries/perlin \
 -ILibraries/utils \
--ILibraries/effects_service \
 -ILibraries/NEC
 
 
