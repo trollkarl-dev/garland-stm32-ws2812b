@@ -235,17 +235,47 @@ int32_t main_nec_read_pulse(void)
     return HAL_TIM_ReadCapturedValue(&htim1, TIM_CHANNEL_2);
 }
 
+static uint8_t nec_prev_address = 0x00;
+static uint8_t nec_prev_command = 0x00;
+static uint8_t nec_prev_exist = 0;
+
 void main_nec_dec_callback(uint8_t address, uint8_t command)
 {
+    nec_prev_address = address;
+    nec_prev_command = command;
+    nec_prev_exist = 1;
+    
+    /* next effect */
     if (address == 0x00 && command == 0x1C)
     {
         btn_click_callback(1);
+    }
+    
+    /* brightness++ */
+    if (address == 0x00 && command == 0x18)
+    {
+        uint8_t brightness = smartled_get_brightness(&garland);
+        
+        brightness = (brightness <= 250) ? brightness + 5 : brightness;
+        smartled_set_brightness(&garland, brightness);
+    }
+    
+    /* brightness-- */
+    if (address == 0x00 && command == 0x52)
+    {
+        uint8_t brightness = smartled_get_brightness(&garland);
+        
+        brightness = (brightness >= 5) ? brightness - 5 : brightness;
+        smartled_set_brightness(&garland, brightness);
     }
 }
 
 void main_nec_rep_callback(void)
 {
-    
+    if (nec_prev_exist)
+    {
+        main_nec_dec_callback(nec_prev_address, nec_prev_command);
+    }
 }
 
 void main_nec_err_callback(enum nec_error err_code)
