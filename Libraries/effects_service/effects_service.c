@@ -174,15 +174,16 @@ static void running_shadow_loop(smartled_t *leds, void *raw_data)
     for (i = 0; i < leds->length; i++)
     {
         int val = ABS((int) data->counter - (int) i);
-	int hue, value;
+        int hue, value;
 
-	val = val > leds->length / 2 ? leds->length - val : val;
+        val = val > leds->length / 2 ? leds->length - val : val;
 
-	hue = (int) ((float) i / leds->length * full_hue);
-	value = (int) ((float) val / (leds->length / 2) * max_value);
+        /*hue = (int) ((float) i / leds->length * full_hue);*/
+        hue = ((i << 16) / leds->length * full_hue) >> 16;
+        /*value = (int) ((float) val / (leds->length / 2) * max_value);*/
+        value = ((val << 16) / (leds->length / 2) * max_value) >> 16;
 
-	smartled_set_hsv(leds, i, hsv(hue, max_whiteness, value));
-
+        smartled_set_hsv(leds, i, hsv(hue, max_whiteness, value));
     }
 
     data->counter = (data->counter + 1) % leds->length;
@@ -209,7 +210,8 @@ static void running_rainbow_from_middle_loop(smartled_t *leds, void *raw_data)
 
     for (i = 0; i < leds->length; i++)
     {
-	    int hue = (float) ((ABS((int) i - (int) (leds->length / 2)) + data->counter) % leds->length) / leds->length * full_hue;
+	    /*int hue = (float) ((ABS((int) i - (int) (leds->length / 2)) + data->counter) % leds->length) / leds->length * full_hue;*/
+	    int32_t hue = ((((ABS((int32_t) i - (int32_t) (leds->length / 2)) + data->counter) % leds->length) << 16) / leds->length * full_hue) >> 16;
 	    smartled_set_hsv(leds, i, hsv(hue, max_whiteness, max_value));
     }
 
@@ -280,17 +282,17 @@ static const perlin_data_t perlin_initials[] =
 };
 
 static const effect_t effects[] = {
-    { running_rainbow_setup, running_rainbow_loop, NULL },
+    /*{ running_rainbow_setup, running_rainbow_loop, NULL },
     { all_rainbow_setup, all_rainbow_loop, NULL },
     
     { perlin_setup, perlin_loop, &(perlin_initials[0]) },
     { perlin_setup, perlin_loop, &(perlin_initials[1]) },
     { perlin_setup, perlin_loop, &(perlin_initials[2]) },
-    { perlin_setup, perlin_loop, &(perlin_initials[3]) },
+    { perlin_setup, perlin_loop, &(perlin_initials[3]) },*/
 
     { running_shadow_setup, running_shadow_loop, NULL },
-    { running_rainbow_from_middle_setup, running_rainbow_from_middle_loop, NULL },
-    { stepping_colors_setup, stepping_colors_loop, NULL }
+    /*{ running_rainbow_from_middle_setup, running_rainbow_from_middle_loop, NULL },*/
+    /*{ stepping_colors_setup, stepping_colors_loop, NULL }*/
 };
 
 /***************************************************************************/
