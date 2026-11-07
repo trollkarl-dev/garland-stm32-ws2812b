@@ -95,46 +95,51 @@ static uint8_t random_buf[] = {
 
 static uint32_t random_buf_len = 1024;
 
-static float dot(vec2d_t *a, vec2d_t *b)
+/* Fixed-point quintic curve (1024 scale)
+ * Input t: 0 to 1024, Output: 0 to 1024 */
+static int32_t smooth_fixed(int32_t t)
 {
-    return a->x * b->x + a->y * b->y;
+    /* Formula: t * t * t * (t * (t * 6 - 15) + 10)
+     * Each multiplication scales up, so we shift back by 10 bits (>> 10) */
+    int32_t step1 = (t * 6) - (15 << 10);                /* 1024 scale */
+    int32_t step2 = ((t * step1) >> 10) + (10 << 10);     /* 1024 scale */
+    int32_t t2 = (t * t) >> 10;                           /* 1024 scale */
+    int32_t t3 = (t2 * t) >> 10;                          /* 1024 scale */
+    
+    return (t3 * step2) >> 10;                            /* 1024 scale */
 }
 
-static float quntic_curve(float t)
+/* Fixed-point linear interpolation
+ * Input t: 0 to 1024. Output: scaled to a and b */
+static int32_t lerp_fixed(int32_t a, int32_t b, int32_t t)
 {
-    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
-}
-    
-static float smooth(float t)
-{
-    return quntic_curve(t);
-}
-    
-float lerp(float a, float b, float t)
-{
-    return a + (b - a) * t;
+    return a + (((b - a) * t) >> 10);
 }
 
-static vec2d_t get_pseudo_random_gradient_vector(uint32_t x, uint32_t y)
+/* Calculates the dot product directly using the pseudo-random vector value.
+ * Returns the distance multiplied by the gradient (effectively: dx, -dx, dy, or -dy).
+ * Output scale: 1024 */
+static int32_t get_dot_fixed(uint32_t x, uint32_t y, int32_t dx, int32_t dy)
 {
-    uint32_t v = (((x * 1836311903) ^ (y * 2971215073)) + 4807526976) & (random_buf_len - 1);
-    
+    /* 4807526976 exceeds uint32_t (0x11E8111C0). 
+     * Casting to uint32_t automatically discards the upper bit, leaving 511775168 */
+    uint32_t v = (((x * 1836311903) ^ (y * 2971215073)) + 511775168) & (random_buf_len - 1);
     v = random_buf[v] & 3;
-    
+
     switch (v)
     {
-        case 0 :  return (vec2d_t) { 1.0f,  0.0f};
-        case 1 :  return (vec2d_t) {-1.0f,  0.0f};
-        case 2 :  return (vec2d_t) { 0.0f,  1.0f};
-        default : return (vec2d_t) { 0.0f, -1.0f};
+        case 0 :  return  dx; /* ( 1,  0) ->  dx * 1 + dy * 0 */
+        case 1 :  return -dx; /* (-1,  0) ->  dx *-1 + dy * 0 */
+        case 2 :  return  dy; /* ( 0,  1) ->  dx * 0 + dy * 1 */
+        default : return -dy; /* ( 0, -1) ->  dx * 0 + dy *-1 */
     }
 }
 
-float perlin(uint32_t fx,
-             uint32_t fy,
-             uint32_t canvas_size_x,
-             uint32_t canvas_size_y,
-             uint32_t cell_size)
+int32_t perlin(uint32_t fx,
+               uint32_t fy,
+               uint32_t canvas_size_x,
+               uint32_t canvas_size_y,
+               uint32_t cell_size)
 {
     uint32_t left = fx / cell_size;
     uint32_t top  = fy / cell_size;
@@ -142,30 +147,31 @@ float perlin(uint32_t fx,
     uint32_t right  = ((left + 1) * cell_size) >= canvas_size_x ? 0 : left + 1;
     uint32_t bottom = ((top  + 1) * cell_size) >= canvas_size_y ? 0 : top  + 1;
     
-    float point_in_quad_x = (float) (fx - left * cell_size) / cell_size;
-    float point_in_quad_y = (float) (fy - top  * cell_size) / cell_size;
+    /* Calculate position inside the cell scaled from 0 to 1024.
+     * Instead of float division: multiply the difference by 1024 first, then divide by cell_size */
+    int32_t point_in_quad_x = (int32_t)(((fx - left * cell_size) << 10) / cell_size);
+    int32_t point_in_quad_y = (int32_t)(((fy - top  * cell_size) << 10) / cell_size);
     
-    vec2d_t top_left_gradient     = get_pseudo_random_gradient_vector(left,  top   );
-    vec2d_t top_right_gradient    = get_pseudo_random_gradient_vector(right, top   );
-    vec2d_t bottom_left_gradient  = get_pseudo_random_gradient_vector(left,  bottom);
-    vec2d_t bottom_right_gradient = get_pseudo_random_gradient_vector(right, bottom);
+    /* Distance to the right/bottom edges (1.0f in our scale is 1024) */
+    int32_t dx_left   = point_in_quad_x;
+    int32_t dx_right  = point_in_quad_x - 1024;
+    int32_t dy_top    = point_in_quad_y;
+    int32_t dy_bottom = point_in_quad_y - 1024;
     
-    vec2d_t distance_to_top_left     = (vec2d_t) {point_in_quad_x,        point_in_quad_y       };
-    vec2d_t distance_to_top_right    = (vec2d_t) {point_in_quad_x - 1.0f, point_in_quad_y       };
-    vec2d_t distance_to_bottom_left  = (vec2d_t) {point_in_quad_x,        point_in_quad_y - 1.0f};
-    vec2d_t distance_to_bottom_right = (vec2d_t) {point_in_quad_x - 1.0f, point_in_quad_y - 1.0f};
+    /* Get dot products directly (values from -1024 to 1024) */
+    int32_t tx1 = get_dot_fixed(left,  top,    dx_left,  dy_top);
+    int32_t tx2 = get_dot_fixed(right, top,    dx_right, dy_top);
+    int32_t bx1 = get_dot_fixed(left,  bottom, dx_left,  dy_bottom);
+    int32_t bx2 = get_dot_fixed(right, bottom, dx_right, dy_bottom);
     
-    float tx1 = dot(&distance_to_top_left,     &top_left_gradient    );
-    float tx2 = dot(&distance_to_top_right,    &top_right_gradient   );
-    float bx1 = dot(&distance_to_bottom_left,  &bottom_left_gradient );
-    float bx2 = dot(&distance_to_bottom_right, &bottom_right_gradient);
+    /* Smooth the interpolation weights */
+    int32_t fade_x = smooth_fixed(point_in_quad_x);
+    int32_t fade_y = smooth_fixed(point_in_quad_y);
     
-    point_in_quad_x = smooth(point_in_quad_x);
-    point_in_quad_y = smooth(point_in_quad_y);
-    
-    float tx = lerp(tx1, tx2, point_in_quad_x);
-    float bx = lerp(bx1, bx2, point_in_quad_x);
-    float tb = lerp(tx, bx, point_in_quad_y);
+    /* Final noise interpolation */
+    int32_t tx = lerp_fixed(tx1, tx2, fade_x);
+    int32_t bx = lerp_fixed(bx1, bx2, fade_x);
+    int32_t tb = lerp_fixed(tx, bx, fade_y);
 
-    return tb;
+    return tb; /* Returns a value in the range of -1024 to 1024 */
 }

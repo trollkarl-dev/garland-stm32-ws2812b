@@ -8,13 +8,16 @@
 #include "perlin.h"
 #include "utils.h"
 
-#define ABS(A) (((A) < 0) ? (-(A)) : (A))
-
 enum {
     full_hue = 360,
     max_whiteness = 100,
     max_value = 100
 };
+
+static inline int32_t effects_service_abs(int32_t a)
+{
+    return a < 0 ? -a : a;
+}
 
 static uint32_t lfsr_seed = 0xDEADBEEF;
 
@@ -116,16 +119,34 @@ static void perlin_setup(void *raw_data, const void *initial)
     memcpy(raw_data, initial, sizeof(perlin_data_t));
 }
 
-static float sigmoid(float x)
+/* Fixed-point sigmoid alternative.
+ * Accepts x from 0 to 1024. Returns coefficient from 0 to 1024. */
+static int32_t sigmoid_fixed(int32_t x)
 {
-    const float threshold = 0.15f;
+    /* 0.15f in 1024 scale is ~154 */
+    const int32_t threshold = 154; 
     
-    if (fabs(x - 0.5f) < threshold)
+    /* Integer equivalent of fabs(x - 0.5f) */
+    int32_t diff = x - 512;
+    if (diff < 0) diff = -diff;
+    
+    if (diff < threshold)
     {
-        return 0.5f * (1.0f + (x - 0.5f) / threshold);
+        /* Original: 0.5f * (1.0f + (x - 0.5f) / threshold)
+         * In integers: 512 + (512 * (x - 512)) / threshold */
+        return 512 + (512 * (x - 512)) / threshold;
     }
     
-    return (x < 0.5f) ? 0.0f : 1.0f;
+    return (x < 512) ? 0 : 1024;
+}
+
+/* Fixed-point linear interpolation for colors.
+ * Accepts start color, end color, and coef from 0 to 1024. */
+static uint8_t lerp_color_fixed(uint8_t c1, uint8_t c2, int32_t coef)
+{
+    /* Formula: a + (b - a) * coef / 1024
+     * Division by 1024 is replaced with a bitwise shift >> 10 */
+    return (uint8_t)(c1 + (((int32_t)(c2 - c1) * coef) >> 10));
 }
 
 static void perlin_loop(smartled_t *leds, void *raw_data)
@@ -136,14 +157,21 @@ static void perlin_loop(smartled_t *leds, void *raw_data)
     
     for (i = 0; i < leds->length; i++)
     {
-        float coef = perlin(i, data->offset, leds->length, vertical_size, 10);
-        coef = sigmoid((coef + 1.0f) / 2.0f);
+        /* Get noise in the range of [-1024 ... 1024] */
+        int32_t coef = perlin(i, data->offset, leds->length, vertical_size, 10);
+        
+        /* Map the range from [-1024 ... 1024] to [0 ... 1024] using shift instead of / 2 */
+        coef = (coef + 1024) >> 1;
+        
+        /* Run through sigmoid, resulting in [0 ... 1024] */
+        coef = sigmoid_fixed(coef);
 
+        /* Calculate new RGB channels entirely using integer arithmetic */
         RGB_t color = (RGB_t)
         {
-            (uint8_t) lerp((float) data->col[0].r, (float) data->col[1].r, coef),
-            (uint8_t) lerp((float) data->col[0].g, (float) data->col[1].g, coef),
-            (uint8_t) lerp((float) data->col[0].b, (float) data->col[1].b, coef)
+            lerp_color_fixed(data->col[0].r, data->col[1].r, coef),
+            lerp_color_fixed(data->col[0].g, data->col[1].g, coef),
+            lerp_color_fixed(data->col[0].b, data->col[1].b, coef)
         };
         
         smartled_set_rgb(leds, i, color);
@@ -173,7 +201,7 @@ static void running_shadow_loop(smartled_t *leds, void *raw_data)
 
     for (i = 0; i < leds->length; i++)
     {
-        int val = ABS((int) data->counter - (int) i);
+        int val = effects_service_abs((int) data->counter - (int) i);
         int hue, value;
 
         val = val > leds->length / 2 ? leds->length - val : val;
@@ -211,7 +239,7 @@ static void running_rainbow_from_middle_loop(smartled_t *leds, void *raw_data)
     for (i = 0; i < leds->length; i++)
     {
 	    /*int hue = (float) ((ABS((int) i - (int) (leds->length / 2)) + data->counter) % leds->length) / leds->length * full_hue;*/
-	    int32_t hue = ((((ABS((int32_t) i - (int32_t) (leds->length / 2)) + data->counter) % leds->length) << 16) / leds->length * full_hue) >> 16;
+	    int32_t hue = ((((effects_service_abs((int32_t) i - (int32_t) (leds->length / 2)) + data->counter) % leds->length) << 16) / leds->length * full_hue) >> 16;
 	    smartled_set_hsv(leds, i, hsv(hue, max_whiteness, max_value));
     }
 
@@ -281,18 +309,23 @@ static const perlin_data_t perlin_initials[] =
     { {(RGB_t) {180, 0,   0  }, (RGB_t) {255, 255, 100}}, 0 }, /* flame */
 };
 
-static const effect_t effects[] = {
-    /*{ running_rainbow_setup, running_rainbow_loop, NULL },
+/***************************************************************************/
+/*                              Used effects                               */
+/***************************************************************************/
+
+static const effect_t effects[] =
+{
+    { running_rainbow_setup, running_rainbow_loop, NULL },
     { all_rainbow_setup, all_rainbow_loop, NULL },
     
     { perlin_setup, perlin_loop, &(perlin_initials[0]) },
     { perlin_setup, perlin_loop, &(perlin_initials[1]) },
     { perlin_setup, perlin_loop, &(perlin_initials[2]) },
-    { perlin_setup, perlin_loop, &(perlin_initials[3]) },*/
+    { perlin_setup, perlin_loop, &(perlin_initials[3]) },
 
     { running_shadow_setup, running_shadow_loop, NULL },
-    /*{ running_rainbow_from_middle_setup, running_rainbow_from_middle_loop, NULL },*/
-    /*{ stepping_colors_setup, stepping_colors_loop, NULL }*/
+    { running_rainbow_from_middle_setup, running_rainbow_from_middle_loop, NULL },
+    { stepping_colors_setup, stepping_colors_loop, NULL }
 };
 
 /***************************************************************************/
